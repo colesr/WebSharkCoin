@@ -1,4 +1,4 @@
-/* main.js — wires factor data + engine + simulator to the DOM, plus UI features */
+/* main.js — wires factor data + engine + simulator to the DOM */
 
 (function () {
   const state = {
@@ -7,7 +7,7 @@
     values: {},
     catalysts: new Set(),
     seed: randomSeed(),
-    autoSync: false,
+    liveHistory: null,
   };
   FACTORS.forEach((f) => (state.values[f.id] = f.default));
 
@@ -27,32 +27,20 @@
     reseedBtn: document.getElementById("reseed-btn"),
     resetBtn: document.getElementById("reset-btn"),
     seedReadout: document.getElementById("seed-readout"),
+    forecastSub: document.getElementById("forecast-sub"),
     assetBtns: Array.from(document.querySelectorAll(".asset-btn")),
     exportCodeBtn: document.getElementById("export-code-btn"),
     exportConfigBtn: document.getElementById("export-config-btn"),
     importBtn: document.getElementById("import-btn"),
     importInput: document.getElementById("import-input"),
-    settingsBtn: document.getElementById("settings-btn"),
-    settingsPanel: document.getElementById("settings-panel"),
-    settingsClose: document.getElementById("settings-close"),
-    themeSelect: document.getElementById("theme-select"),
-    animationsToggle: document.getElementById("animations-toggle"),
-    autoSyncToggle: document.getElementById("auto-sync-toggle"),
-    extraCatalystsToggle: document.getElementById("extra-catalysts-toggle"),
-    openIdeBtn: document.getElementById("open-ide-btn"),
-    idePanel: document.getElementById("ide-panel"),
-    ideClose: document.getElementById("ide-close"),
-    ideEditor: document.getElementById("ide-editor"),
-    ideRun: document.getElementById("ide-run"),
-    ideConsole: document.getElementById("ide-console"),
-    coinAiBtn: document.getElementById("coinai-btn"),
-    chatbotPanel: document.getElementById("chatbot-panel"),
-    chatbotClose: document.getElementById("chatbot-close"),
-    syncLiveBtn: document.getElementById("sync-live-btn"),
-    liveBadge: document.getElementById("live-badge"),
   };
 
   const seismo = new Seismograph(els.seismographCanvas);
+  let lastDriftVal = 0, lastVolVal = 0; // for count-up animation
+
+  function settings() {
+    return window.MMTSettings ? window.MMTSettings.get() : DEFAULT_SETTINGS;
+  }
 
   function currentAsset() {
     return ASSETS.find((a) => a.id === state.assetId);
@@ -79,9 +67,10 @@
   function renderSliders() {
     els.slidersContainer.innerHTML = "";
     const factors = FACTORS.filter((f) => f.category === state.activeCategory);
-    factors.forEach((f) => {
+    factors.forEach((f, i) => {
       const item = document.createElement("div");
       item.className = "slider-item";
+      item.style.animationDelay = (i * 30) + "ms";
 
       const head = document.createElement("div");
       head.className = "slider-head";
@@ -118,7 +107,11 @@
       input.addEventListener("input", () => {
         state.values[f.id] = Number(input.value);
         val.textContent = fmtSigned(state.values[f.id]);
+        val.classList.remove("pulse-cyan");
+        void val.offsetWidth; // restart animation
+        val.classList.add("pulse-cyan");
         recomputeAndRender(true);
+        if (settings().autoRunOnChange) scheduleAutoRun();
       });
 
       item.appendChild(head);
@@ -129,6 +122,12 @@
     });
   }
 
+  let autoRunTimer = null;
+  function scheduleAutoRun() {
+    clearTimeout(autoRunTimer);
+    autoRunTimer = setTimeout(runSimulation, 450);
+  }
+
   function fmtSigned(v) {
     const n = Math.round(v);
     return (n > 0 ? "+" : "") + n;
@@ -137,14 +136,11 @@
   /* ---------- Catalysts ---------- */
   function renderCatalysts() {
     els.catalystGrid.innerHTML = "";
-    const catalysts = CATALYSTS.slice();
-    if (!state.extraCatalystsEnabled) {
-      // optionally filter some if extra disabled (backwards compatible)
-    }
-    catalysts.forEach((c) => {
+    CATALYSTS.forEach((c, i) => {
       const btn = document.createElement("button");
       btn.className = "catalyst-btn" + (state.catalysts.has(c.id) ? " is-active" : "");
       btn.dataset.group = c.group;
+      btn.style.animationDelay = (i * 20) + "ms";
 
       const name = document.createElement("div");
       name.className = "catalyst-name";
@@ -162,13 +158,28 @@
       btn.appendChild(shock);
 
       btn.addEventListener("click", () => {
-        if (state.catalysts.has(c.id)) state.catalysts.delete(c.id);
-        else state.catalysts.add(c.id);
+        if (state.catalysts.has(c.id)) {
+          state.catalysts.delete(c.id);
+        } else {
+          state.catalysts.add(c.id);
+          triggerImpactFlash();
+          showToast((c.group === "bullish" ? "▲ " : c.group === "bearish" ? "▼ " : "◆ ") + c.label + " armed");
+        }
         renderCatalysts();
+        recomputeAndRender(true);
+        if (settings().autoRunOnChange) scheduleAutoRun();
       });
 
       els.catalystGrid.appendChild(btn);
     });
+  }
+
+  function triggerImpactFlash() {
+    const panel = document.querySelector(".ticker-panel");
+    if (!panel) return;
+    panel.classList.remove("panel-flash");
+    void panel.offsetWidth;
+    panel.classList.add("panel-flash");
   }
 
   /* ---------- Breakdown ---------- */
@@ -176,9 +187,10 @@
     els.breakdownList.innerHTML = "";
     const top = contributions.slice(0, 7);
     const maxAbs = Math.max(0.001, ...top.map((c) => Math.abs(c.driftContrib)));
-    top.forEach((c) => {
+    top.forEach((c, i) => {
       const row = document.createElement("div");
       row.className = "breakdown-row";
+      row.style.animationDelay = (i * 25) + "ms";
 
       const label = document.createElement("span");
       label.className = "breakdown-label";
@@ -189,8 +201,8 @@
       const fill = document.createElement("div");
       const pct = (Math.abs(c.driftContrib) / maxAbs) * 50; // half-track max
       fill.className = "breakdown-fill " + (c.driftContrib >= 0 ? "pos" : "neg");
-      fill.style.width = pct + "%";
       track.appendChild(fill);
+      requestAnimationFrame(() => { fill.style.width = pct + "%"; });
 
       const pctLabel = document.createElement("span");
       pctLabel.className = "breakdown-pct";
@@ -203,17 +215,40 @@
     });
   }
 
+  /* ---------- Number count-up animation ---------- */
+  function animateNumber(el, from, to, fmt, duration = 350) {
+    const start = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const val = from + (to - from) * eased;
+      el.textContent = fmt(val);
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
   /* ---------- Compute + live readouts ---------- */
   function recomputeAndRender(pulse) {
     const asset = currentAsset();
     const { annualDrift, annualVol, contributions } = computeComposite(state.values, asset.baseAnnualVol);
 
-    els.driftValue.textContent = (annualDrift >= 0 ? "+" : "") + (annualDrift * 100).toFixed(1) + "%";
-    els.volValue.textContent = (annualVol * 100).toFixed(1) + "%";
+    const reduceMotion = settings().reduceMotion;
+    if (reduceMotion) {
+      els.driftValue.textContent = (annualDrift >= 0 ? "+" : "") + (annualDrift * 100).toFixed(1) + "%";
+      els.volValue.textContent = (annualVol * 100).toFixed(1) + "%";
+    } else {
+      animateNumber(els.driftValue, lastDriftVal * 100, annualDrift * 100, (v) => (v >= 0 ? "+" : "") + v.toFixed(1) + "%");
+      animateNumber(els.volValue, lastVolVal * 100, annualVol * 100, (v) => v.toFixed(1) + "%");
+    }
+    lastDriftVal = annualDrift;
+    lastVolVal = annualVol;
 
     const tone = driftLabel(annualDrift);
     els.toneValue.textContent = tone.text;
-    els.toneValue.className = "metric-value tone-tag " + tone.cls;
+    els.toneValue.classList.remove("tone-pop");
+    void els.toneValue.offsetWidth;
+    els.toneValue.className = "metric-value tone-tag tone-pop " + tone.cls;
 
     renderBreakdown(contributions);
 
@@ -229,11 +264,13 @@
     const asset = currentAsset();
     const { annualDrift, annualVol } = recomputeAndRender(false);
     const catalysts = activeCatalysts(state.catalysts);
+    const cfg = settings();
 
     const history = synthesizeHistory({
       startPrice: asset.startPrice,
       annualVol,
       seed: state.seed,
+      historyDays: cfg.historyDays,
     });
 
     const paths = simulatePaths({
@@ -242,29 +279,42 @@
       annualVol,
       catalysts,
       seed: state.seed,
+      forecastDays: cfg.forecastDays,
+      numPaths: cfg.numPaths,
     });
 
-    const bands = buildForecastBands(paths);
+    const bands = buildForecastBands(paths, cfg.forecastDays);
+
+    els.forecastCanvas.classList.remove("chart-refresh");
+    void els.forecastCanvas.offsetWidth;
+    els.forecastCanvas.classList.add("chart-refresh");
 
     drawForecastChart(els.forecastCanvas, {
       history,
       bands,
-      historyDays: TRADING_DAYS_HISTORY,
-      forecastDays: FORECAST_DAYS,
+      historyDays: cfg.historyDays,
+      forecastDays: cfg.forecastDays,
+      liveHistory: state.liveHistory,
     });
 
     els.seedReadout.textContent = "seed: " + state.seed;
+    els.forecastSub.textContent = `Monte Carlo · ${cfg.numPaths} paths · ${cfg.forecastDays}d`;
+    document.dispatchEvent(new CustomEvent("mmt:simulation-run", { detail: { annualDrift, annualVol, bands } }));
   }
 
   /* ---------- Asset selection ---------- */
   function selectAsset(id) {
+    const asset0 = currentAsset();
     state.assetId = id;
+    state.liveHistory = null;
     const asset = currentAsset();
-    els.priceValue.textContent = fmtPrice(asset.startPrice);
-    els.assetName.textContent = asset.name;
+
+    animateNumber(els.priceValue, asset0.startPrice, asset.startPrice, (v) => fmtPrice(v), 400);
+    els.assetName.textContent = asset.name + " · scenario model";
     els.assetBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.asset === id));
     recomputeAndRender(false);
     runSimulation();
+    document.dispatchEvent(new CustomEvent("mmt:asset-changed", { detail: { assetId: id } }));
   }
 
   /* ---------- Reset ---------- */
@@ -275,31 +325,30 @@
     renderCatalysts();
     recomputeAndRender(false);
     runSimulation();
+    showToast("Reset to defaults");
   }
 
   /* ---------- Export / Import ---------- */
   function exportModelCode() {
     const asset = currentAsset();
+    const cfg = settings();
     const bundle = buildModelCodeBundle({
       asset,
       seed: state.seed,
       values: state.values,
       activeCatalystIds: Array.from(state.catalysts),
+      historyDays: cfg.historyDays,
+      forecastDays: cfg.forecastDays,
+      numPaths: cfg.numPaths,
     });
-    downloadTextFile(
-      `${asset.id}-model-${state.seed}.js`,
-      bundle,
-      "application/javascript"
-    );
+    downloadTextFile(`${asset.id}-model-${state.seed}.js`, bundle, "application/javascript");
+    showToast("Model code downloaded");
   }
 
   function exportConfig() {
     const snap = buildConfigSnapshot(state);
-    downloadTextFile(
-      `${state.assetId}-config-${state.seed}.json`,
-      JSON.stringify(snap, null, 2),
-      "application/json"
-    );
+    downloadTextFile(`${state.assetId}-config-${state.seed}.json`, JSON.stringify(snap, null, 2), "application/json");
+    showToast("Config downloaded");
   }
 
   function importConfig(file) {
@@ -332,37 +381,29 @@
 
         const asset = currentAsset();
         els.priceValue.textContent = fmtPrice(asset.startPrice);
-        els.assetName.textContent = asset.name;
+        els.assetName.textContent = asset.name + " · scenario model";
         els.assetBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.asset === state.assetId));
 
         recomputeAndRender(false);
         runSimulation();
+        showToast("Config loaded");
       } catch (err) {
-        alert("Couldn't load that config file: " + err.message);
+        showToast("Couldn't load that file: " + err.message);
       }
     };
     reader.readAsText(file);
   }
 
-  /* ---------- Live price sync ---------- */
-  async function syncLivePrice() {
-    try {
-      const asset = currentAsset();
-      const price = await fetchCurrentPrice(asset.id);
-      if (price) {
-        els.priceValue.textContent = fmtPrice(price);
-        els.liveBadge.style.display = 'inline-block';
-      }
-    } catch (err) {
-      console.warn('live price sync failed', err);
-    }
-  }
-
   /* ---------- Event bindings ---------- */
-  els.runBtn.addEventListener("click", runSimulation);
+  els.runBtn.addEventListener("click", () => {
+    els.runBtn.classList.add("is-firing");
+    setTimeout(() => els.runBtn.classList.remove("is-firing"), 400);
+    runSimulation();
+  });
   els.reseedBtn.addEventListener("click", () => {
     state.seed = randomSeed();
     runSimulation();
+    showToast("New random draw");
   });
   els.resetBtn.addEventListener("click", resetAll);
   els.exportCodeBtn.addEventListener("click", exportModelCode);
@@ -380,114 +421,36 @@
     seismo.draw();
     runSimulation();
   });
-
-  // settings panel
-  els.settingsBtn.addEventListener('click', () => openSettings());
-  els.settingsClose.addEventListener('click', () => closeSettings());
-  els.themeSelect.addEventListener('change', (e) => setTheme(e.target.value));
-  els.animationsToggle.addEventListener('change', (e) => setAnimationsEnabled(e.target.checked));
-  els.autoSyncToggle.addEventListener('change', (e) => { state.autoSync = e.target.checked; localStorage.setItem('wsc:autoSync', e.target.checked ? '1' : '0'); });
-  els.extraCatalystsToggle.addEventListener('change', (e) => { state.extraCatalystsEnabled = e.target.checked; });
-  els.openIdeBtn.addEventListener('click', openIDE);
-
-  // IDE
-  els.ideClose.addEventListener('click', closeIDE);
-  els.ideRun.addEventListener('click', runIDE);
-
-  // chatbot
-  els.coinAiBtn.addEventListener('click', () => openChatbot());
-  els.chatbotClose.addEventListener('click', () => closeChatbot());
-
-  // live sync
-  els.syncLiveBtn.addEventListener('click', syncLivePrice);
-
-  /* ---------- Settings behavior ---------- */
-  function openSettings() {
-    els.settingsPanel.setAttribute('aria-hidden', 'false');
-    els.settingsPanel.style.right = '18px';
-  }
-  function closeSettings() {
-    els.settingsPanel.setAttribute('aria-hidden', 'true');
-    els.settingsPanel.style.right = '-420px';
-  }
-  function setTheme(t) {
-    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
-    else document.documentElement.removeAttribute('data-theme');
-    localStorage.setItem('wsc:theme', t);
-  }
-  function setAnimationsEnabled(enabled) {
-    localStorage.setItem('wsc:animations', enabled ? '1' : '0');
-    document.body.classList.toggle('no-anim', !enabled);
-  }
-
-  /* ---------- IDE behavior ---------- */
-  function openIDE() {
-    els.idePanel.setAttribute('aria-hidden', 'false');
-    els.idePanel.style.right = '18px';
-    // load saved
-    const saved = localStorage.getItem('wsc:ide:code');
-    if (saved) els.ideEditor.value = saved;
-  }
-  function closeIDE() {
-    els.idePanel.setAttribute('aria-hidden', 'true');
-    els.idePanel.style.right = '-420px';
-  }
-  function runIDE() {
-    const code = els.ideEditor.value;
-    localStorage.setItem('wsc:ide:code', code);
-    els.ideConsole.textContent = '';
-    try {
-      // sandboxed run: use Function to avoid access to outer scope
-      const result = new Function('FACTORS, CATALYSTS, ASSETS, state', code)(FACTORS, CATALYSTS, ASSETS, state);
-      els.ideConsole.textContent = 'Result: ' + JSON.stringify(result);
-    } catch (err) {
-      els.ideConsole.textContent = 'Error: ' + err.message;
+  document.addEventListener("mmt:settings-changed", (e) => {
+    if (["historyDays", "forecastDays", "numPaths"].includes(e.detail.changedKey)) {
+      runSimulation();
     }
-  }
+  });
 
-  /* ---------- Chatbot integration (delegates to ai-chatbot.js) ---------- */
-  function openChatbot() {
-    // delegate to CoinAI module if available
-    if (window.CoinAI && typeof window.CoinAI.open === 'function') {
-      window.CoinAI.open();
-      els.chatbotPanel.setAttribute('aria-hidden', 'false');
-      els.chatbotPanel.style.right = '18px';
-    } else {
-      // fallback: reveal panel so user can see setup UI
-      els.chatbotPanel.setAttribute('aria-hidden', 'false');
-      els.chatbotPanel.style.right = '18px';
-    }
-  }
-  function closeChatbot() {
-    els.chatbotPanel.setAttribute('aria-hidden', 'true');
-    els.chatbotPanel.style.right = '-420px';
-  }
+  /* ---------- Bridge for other modules (ide.js, livedata.js, chatbot.js) ---------- */
+  window.MMT = {
+    state,
+    currentAsset,
+    runSimulation,
+    recomputeAndRender,
+    setLiveHistory(arr) {
+      state.liveHistory = arr;
+      runSimulation();
+    },
+  };
 
   /* ---------- Init ---------- */
   function init() {
+    const cfg = settings();
+    if (cfg.defaultAsset && ASSETS.some((a) => a.id === cfg.defaultAsset)) {
+      state.assetId = cfg.defaultAsset;
+    }
     renderTabs();
     renderSliders();
     renderCatalysts();
-    selectAsset('btc');
-
-    // restore settings
-    const theme = localStorage.getItem('wsc:theme') || 'dark';
-    els.themeSelect.value = theme;
-    setTheme(theme);
-    const anim = localStorage.getItem('wsc:animations');
-    els.animationsToggle.checked = anim !== '0';
-    setAnimationsEnabled(anim !== '0');
-    els.autoSyncToggle.checked = localStorage.getItem('wsc:autoSync') === '1';
-
-    // register CoinAI if present
-    if (window.CoinAI && window.CoinAI.attachOpen) window.CoinAI.attachOpen(document);
-
-    // optionally auto-sync
-    if (els.autoSyncToggle.checked) {
-      syncLivePrice();
-      setInterval(() => { if (els.autoSyncToggle.checked) syncLivePrice(); }, 60000);
-    }
+    selectAsset(state.assetId);
+    document.body.classList.add("app-ready");
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener("DOMContentLoaded", init);
 })();

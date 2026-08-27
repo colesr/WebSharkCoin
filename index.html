@@ -1,22 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-reduce-motion="false">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Market Mechanics Terminal — Crypto Price Factor Simulator</title>
+<title>Market Mechanics Terminal — Crypto Price Scenario Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <div class="scanlines" aria-hidden="true"></div>
+<div class="toast-container" id="toast-container" aria-live="polite"></div>
 
 <header class="topbar">
   <div class="topbar-left">
     <span class="logo-mark">◈</span>
     <div class="logo-text">
       <span class="logo-title">MARKET MECHANICS TERMINAL</span>
-      <span class="logo-sub">crypto price factor simulator — v1.0</span>
+      <span class="logo-sub">crypto price scenario engine — v2.0</span>
     </div>
   </div>
   <div class="topbar-right">
@@ -31,8 +32,11 @@
       <button class="ghost-btn" id="import-btn" title="Load a previously exported JSON config">IMPORT</button>
       <input type="file" id="import-input" accept="application/json" hidden />
     </div>
+    <button class="icon-btn" id="theme-quick-btn" title="Toggle dark / light mode" aria-label="Toggle theme">
+      <span class="theme-icon-dark">☾</span><span class="theme-icon-light">☀</span>
+    </button>
+    <button class="ghost-btn" id="ide-btn" title="Open the model IDE to edit and run code directly">IDE</button>
     <button class="ghost-btn" id="settings-btn" title="Open settings">SETTINGS</button>
-    <button class="ghost-btn" id="coinai-btn" title="Open Coin.ai chatbot">COIN.AI</button>
     <button class="ghost-btn" id="reset-btn" title="Reset all factors to defaults">RESET</button>
   </div>
 </header>
@@ -44,7 +48,7 @@
     <div class="ticker-readout">
       <div class="ticker-price">
         <span class="ticker-price-value" id="price-value">$111,000</span>
-        <span class="ticker-asset-name" id="asset-name">Bitcoin</span>
+        <span class="ticker-asset-name" id="asset-name">Bitcoin · scenario model</span>
       </div>
       <div class="ticker-metrics">
         <div class="metric">
@@ -63,10 +67,6 @@
     </div>
     <canvas id="seismograph" class="seismograph-canvas" aria-label="Live composite signal seismograph"></canvas>
     <p class="micro-caption">Live signal trace — reacts to every factor change below, like a needle on a seismograph.</p>
-    <div class="ticker-controls">
-      <button class="ghost-btn" id="sync-live-btn" title="Pull most recent market price">SYNC LIVE PRICE</button>
-      <span id="live-badge" class="live-badge">LIVE</span>
-    </div>
   </section>
 
   <!-- Signal breakdown -->
@@ -85,18 +85,21 @@
 
     <!-- Forecast -->
     <section class="panel forecast-panel">
-      <h2 class="panel-title">Forecast Fan Chart <span class="panel-sub">Monte Carlo · 300 paths · 180d</span></h2>
+      <h2 class="panel-title">Forecast Fan Chart <span class="panel-sub" id="forecast-sub">Monte Carlo simulation</span></h2>
       <canvas id="forecast-canvas" class="forecast-canvas" aria-label="Monte Carlo forecast fan chart"></canvas>
       <div class="forecast-legend">
-        <span><i class="dot dot-history"></i> Simulated recent history</span>
+        <span><i class="dot dot-history"></i> Modeled recent history</span>
         <span><i class="dot dot-median"></i> Median forecast</span>
         <span><i class="dot dot-band"></i> 10–90% range</span>
+        <span id="legend-live" class="is-hidden"><i class="dot dot-live"></i> Live market price</span>
       </div>
       <div class="forecast-controls">
         <button class="primary-btn" id="run-btn">RUN SIMULATION</button>
         <button class="ghost-btn" id="reseed-btn" title="Draw a new random scenario with the same settings">RESEED</button>
+        <button class="ghost-btn" id="live-compare-btn" title="Overlay real recent market prices for comparison">COMPARE TO LIVE PRICE</button>
         <span class="seed-readout" id="seed-readout">seed: —</span>
       </div>
+      <p class="live-status" id="live-status"></p>
     </section>
   </div>
 
@@ -107,67 +110,154 @@
   </section>
 
   <p class="disclaimer">
-    This is a transparent crypto price analysis engine. Use responsibly; not financial advice. Models should be validated against live market data before any trading decisions.
+    Forecasts are produced by a transparent, hand-configured weighting model (every weight lives in
+    <code>js/factors.js</code> and is inspectable) combined with a Monte Carlo price simulation — not a fitted or
+    trained financial model, and not a live data feed unless you turn on live comparison above. Nothing here is
+    financial advice.
   </p>
 </main>
 
-<!-- Side panels: settings, ide, chatbot -->
-<div id="settings-panel" class="side-panel" aria-hidden="true">
-  <header class="side-panel-header"><h3>Settings</h3><button id="settings-close" class="ghost-btn">Close</button></header>
-  <div class="side-panel-body">
-    <label class="setting-row"><span>Theme</span>
-      <select id="theme-select"><option value="dark">Dark</option><option value="light">Light</option></select>
-    </label>
-    <label class="setting-row"><span>Enable animations</span>
-      <input type="checkbox" id="animations-toggle" checked />
-    </label>
-    <label class="setting-row"><span>Open IDE panel</span>
-      <button class="ghost-btn" id="open-ide-btn">Open IDE</button>
-    </label>
-    <label class="setting-row"><span>Sync live prices automatically</span>
-      <input type="checkbox" id="auto-sync-toggle" />
-    </label>
-    <label class="setting-row"><span>Extra event catalysts</span>
-      <input type="checkbox" id="extra-catalysts-toggle" />
-    </label>
+<!-- ============ Settings drawer ============ -->
+<div class="settings-overlay" id="settings-overlay"></div>
+<aside class="settings-panel" id="settings-panel" aria-hidden="true">
+  <div class="settings-header">
+    <h2>Settings</h2>
+    <button class="icon-btn" id="settings-close-btn" aria-label="Close settings">✕</button>
+  </div>
+
+  <div class="settings-body">
+    <section class="settings-section">
+      <h3>Appearance</h3>
+      <div class="settings-row">
+        <label class="radio-inline"><input type="radio" name="theme" value="dark" /> Dark</label>
+        <label class="radio-inline"><input type="radio" name="theme" value="light" /> Light</label>
+      </div>
+      <div class="settings-row">
+        <label class="switch-row">
+          <input type="checkbox" id="setting-reduce-motion" />
+          <span>Reduce motion &amp; animations</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Simulation</h3>
+      <div class="settings-row">
+        <label for="setting-default-asset">Default asset on load</label>
+        <select id="setting-default-asset">
+          <option value="btc">BTC</option>
+          <option value="eth">ETH</option>
+          <option value="sol">SOL</option>
+        </select>
+      </div>
+      <div class="settings-row settings-slider-row">
+        <label for="setting-history-days">Modeled history window</label>
+        <input type="range" id="setting-history-days" min="20" max="120" step="5" />
+        <span id="setting-history-days-val">60d</span>
+      </div>
+      <div class="settings-row settings-slider-row">
+        <label for="setting-forecast-days">Forecast horizon</label>
+        <input type="range" id="setting-forecast-days" min="30" max="365" step="5" />
+        <span id="setting-forecast-days-val">180d</span>
+      </div>
+      <div class="settings-row settings-slider-row">
+        <label for="setting-num-paths">Monte Carlo paths</label>
+        <input type="range" id="setting-num-paths" min="50" max="800" step="25" />
+        <span id="setting-num-paths-val">300</span>
+      </div>
+      <div class="settings-row">
+        <label class="switch-row">
+          <input type="checkbox" id="setting-auto-run" />
+          <span>Auto re-run forecast when sliders change</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Live Data</h3>
+      <div class="settings-row">
+        <label class="switch-row">
+          <input type="checkbox" id="setting-live-data" />
+          <span>Enable live price comparison feature</span>
+        </label>
+      </div>
+      <p class="settings-note">Pulls free public price data from CoinGecko when you click "Compare to Live Price." Requires internet access; the rest of the app works fully offline.</p>
+    </section>
+
+    <section class="settings-section">
+      <h3>Coin.ai &amp; Data Privacy</h3>
+      <div class="settings-row">
+        <label class="switch-row">
+          <input type="checkbox" id="setting-local-logging" />
+          <span>Locally log Coin.ai chats for training data</span>
+        </label>
+      </div>
+      <p class="settings-note">
+        Off by default. When on, your Coin.ai conversations are saved in this browser's local storage only —
+        nothing is uploaded anywhere. Note: this stores a local dataset for <em>you</em> to export and use for your
+        own fine-tuning elsewhere. Continuous background training of the in-browser model itself doesn't happen —
+        that's not something an on-device inference model can actually do.
+      </p>
+      <div class="settings-row settings-btn-row">
+        <button class="ghost-btn" id="export-all-data-btn">EXPORT ALL LOCAL DATA</button>
+        <button class="ghost-btn danger-btn" id="clear-local-data-btn">CLEAR LOCAL DATA</button>
+      </div>
+    </section>
+  </div>
+</aside>
+
+<!-- ============ IDE modal ============ -->
+<div class="ide-modal" id="ide-modal">
+  <div class="ide-window">
+    <div class="ide-header">
+      <span class="ide-title">MODEL IDE <span class="panel-sub">edit &amp; run the model code — sandboxed, nothing leaves your browser</span></span>
+      <button class="icon-btn" id="ide-close-btn" aria-label="Close IDE">✕</button>
+    </div>
+    <div class="ide-toolbar">
+      <button class="primary-btn" id="ide-run-btn">▶ RUN</button>
+      <button class="ghost-btn" id="ide-load-btn">LOAD CURRENT MODEL</button>
+      <button class="ghost-btn" id="ide-copy-btn">COPY</button>
+      <button class="ghost-btn" id="ide-download-btn">DOWNLOAD</button>
+    </div>
+    <div class="ide-split">
+      <textarea id="ide-editor" class="ide-editor" spellcheck="false" placeholder="// Click LOAD CURRENT MODEL to start from your current slider configuration."></textarea>
+      <div class="ide-console" id="ide-console-output"></div>
+    </div>
   </div>
 </div>
 
-<div id="ide-panel" class="side-panel" aria-hidden="true">
-  <header class="side-panel-header"><h3>IDE — Model & Code Lab</h3><button id="ide-close" class="ghost-btn">Close</button></header>
-  <div class="side-panel-body ide-body">
-    <textarea id="ide-editor" placeholder="Edit model code or helper functions here..." spellcheck="false"></textarea>
-    <div class="ide-controls">
-      <button id="ide-save" class="ghost-btn">Save</button>
-      <button id="ide-run" class="primary-btn">Run (sandbox)</button>
-    </div>
-    <pre id="ide-console" class="ide-console" aria-live="polite"></pre>
+<!-- ============ Coin.ai chatbot ============ -->
+<button class="coinai-fab" id="coinai-fab" title="Open Coin.ai">
+  <span class="coinai-fab-icon">◈</span> Coin.ai
+</button>
+
+<div class="coinai-panel" id="coinai-panel">
+  <div class="coinai-header">
+    <span class="coinai-title">Coin.ai <span class="panel-sub">runs locally on your device — free</span></span>
+    <button class="icon-btn" id="coinai-close-btn" aria-label="Close Coin.ai">✕</button>
   </div>
-</div>
 
-<div id="chatbot-panel" class="side-panel" aria-hidden="true">
-  <header class="side-panel-header"><h3>Coin.ai</h3><button id="chatbot-close" class="ghost-btn">Close</button></header>
-  <div class="side-panel-body chatbot-body">
-    <div id="chatbot-setup" class="chatbot-setup">
-      <p>Select a local model to download and run for free (this UI only helps orchestrate — actual local runtime is user responsibility):</p>
-      <select id="model-select">
-        <option value="llama-mini">LLaMA-mini (small)</option>
-        <option value="ggml-gpt4all">GPT4All (ggml)</option>
-        <option value="mistral-small">Mistral-small</option>
-      </select>
-      <label><input type="checkbox" id="train-on-logs-toggle" /> Allow model to be continuously trained on app logs (locally)</label>
-      <div class="chatbot-setup-actions">
-        <button id="model-download" class="primary-btn">Download & Use Locally</button>
-        <button id="model-skip" class="ghost-btn">Skip, use remote demo</button>
+  <div class="coinai-body">
+    <div class="coinai-view" id="coinai-model-select">
+      <p class="settings-note">
+        Pick a small open model to download once and run entirely in this browser via WebGPU — no server, no API
+        key, no cost after the download. Requires a WebGPU-capable browser (recent Chrome/Edge recommended).
+      </p>
+      <div class="model-list" id="coinai-model-list"></div>
+      <button class="primary-btn" id="coinai-download-btn">DOWNLOAD &amp; RUN LOCALLY</button>
+      <div class="coinai-download-progress is-hidden" id="coinai-download-progress">
+        <div class="progress-track"><div class="progress-bar" id="coinai-progress-bar"></div></div>
+        <span class="coinai-download-status" id="coinai-download-status"></span>
       </div>
     </div>
 
-    <div id="chatbot-window" class="chatbot-window" hidden>
-      <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
-      <div class="chat-input-row">
-        <input id="chat-input" placeholder="Ask Coin.ai about models, forecasts, or data..." />
-        <button id="chat-send" class="primary-btn">Send</button>
+    <div class="coinai-view is-hidden" id="coinai-chat-view">
+      <div class="coinai-messages" id="coinai-messages"></div>
+      <div class="coinai-input-row">
+        <textarea id="coinai-input" class="coinai-input" rows="1" placeholder="Ask about the current model, factors, or forecast…"></textarea>
+        <button class="primary-btn" id="coinai-send-btn">SEND</button>
       </div>
+      <button class="text-btn" id="coinai-change-model-btn">↺ change model</button>
     </div>
   </div>
 </div>
@@ -178,11 +268,10 @@
 <script src="js/simulate.js"></script>
 <script src="js/chart.js"></script>
 <script src="js/export.js"></script>
-<script src="js/data.js"></script>
-<script src="js/ui-anim.js"></script>
 <script src="js/settings.js"></script>
-<script src="js/ide.js"></script>
-<script src="js/ai-chatbot.js"></script>
 <script src="js/main.js"></script>
+<script src="js/ide.js"></script>
+<script src="js/livedata.js"></script>
+<script src="js/chatbot.js"></script>
 </body>
 </html>

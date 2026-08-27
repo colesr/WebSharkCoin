@@ -1,5 +1,12 @@
 /* factors.js
    Defines every simulated market factor.
+   Each slider factor runs -100 (bearish/risk-off end) to +100 (bullish/risk-on end).
+   driftWeight: contribution to expected annualized return (signed)
+   volWeight:   contribution to annualized volatility when the slider sits away
+                from neutral (0). A negative volWeight means moving toward the
+                bullish/orderly end of that factor calms the market; positive
+                means moving away from neutral (either direction) or toward
+                that end excites it. See engine.js for exact math.
 */
 
 const FACTOR_CATEGORIES = [
@@ -158,58 +165,136 @@ const FACTORS = [
 ];
 
 /* One-off event catalysts: applied as an immediate price jump plus a
-   temporary volatility spike that decays over DECAY_DAYS. */
+   temporary volatility spike that decays over decayDays. group drives the
+   color/badge in the UI: "bullish", "bearish", or "mixed" (uncertain sign,
+   but reliably raises volatility). */
 const CATALYSTS = [
+  // --- Regulatory & institutional ---
   {
-    id: "etf_approval", label: "ETF Approval", group: "bullish",
-    desc: "A major spot ETF is approved.",
+    id: "etf_approval", label: "Spot ETF Approval", group: "bullish",
+    desc: "A major spot ETF is approved by regulators.",
     shock: 0.18, volSpike: 0.6, decayDays: 25,
+  },
+  {
+    id: "etf_rejection", label: "Spot ETF Rejection", group: "bearish",
+    desc: "A closely watched ETF application is rejected or delayed indefinitely.",
+    shock: -0.10, volSpike: 0.4, decayDays: 15,
+  },
+  {
+    id: "regulatory_crackdown", label: "Regulatory Crackdown", group: "bearish",
+    desc: "A major regulator moves aggressively against the asset or its exchanges.",
+    shock: -0.20, volSpike: 0.5, decayDays: 30,
+  },
+  {
+    id: "favorable_legislation", label: "Favorable Legislation Passed", group: "bullish",
+    desc: "A major economy passes clear, market-friendly crypto legislation.",
+    shock: 0.10, volSpike: 0.3, decayDays: 20,
+  },
+  {
+    id: "sovereign_adoption", label: "Sovereign Nation Adoption", group: "bullish",
+    desc: "A national government adopts the asset as legal tender or reserve asset.",
+    shock: 0.14, volSpike: 0.45, decayDays: 30,
+  },
+  {
+    id: "sovereign_ban", label: "Sovereign Nation Ban", group: "bearish",
+    desc: "A major economy bans trading, mining, or holding the asset outright.",
+    shock: -0.16, volSpike: 0.5, decayDays: 25,
+  },
+  {
+    id: "cbdc_launch", label: "Major CBDC Launch", group: "mixed",
+    desc: "A large central bank launches a digital currency, reshaping the competitive landscape.",
+    shock: -0.03, volSpike: 0.35, decayDays: 20,
+  },
+
+  // --- Market structure & institutional flows ---
+  {
+    id: "exchange_collapse", label: "Exchange / Lender Collapse", group: "bearish",
+    desc: "A major exchange, custodian, or lender fails and freezes withdrawals.",
+    shock: -0.30, volSpike: 1.2, decayDays: 35,
+  },
+  {
+    id: "whale_dump", label: "Large Whale / Estate Liquidation", group: "bearish",
+    desc: "A dormant wallet, government seizure, or bankruptcy estate dumps a large position.",
+    shock: -0.08, volSpike: 0.5, decayDays: 12,
+  },
+  {
+    id: "institutional_accumulation", label: "Institutional Treasury Buy", group: "bullish",
+    desc: "A large corporation or fund announces a major treasury allocation.",
+    shock: 0.09, volSpike: 0.3, decayDays: 18,
+  },
+  {
+    id: "short_squeeze", label: "Short Squeeze Cascade", group: "bullish",
+    desc: "Crowded short positioning unwinds violently, forcing cascading liquidations upward.",
+    shock: 0.15, volSpike: 0.9, decayDays: 8,
+  },
+  {
+    id: "long_liquidation_cascade", label: "Long Liquidation Cascade", group: "bearish",
+    desc: "Overleveraged long positions unwind violently in a cascading sell-off.",
+    shock: -0.15, volSpike: 0.9, decayDays: 8,
+  },
+  {
+    id: "options_expiry_pin", label: "Large Options Expiry", group: "mixed",
+    desc: "A large monthly or quarterly options expiry concentrates positioning near a strike price.",
+    shock: 0.0, volSpike: 0.4, decayDays: 5,
+  },
+  {
+    id: "bank_failure", label: "Traditional Bank Failure", group: "mixed",
+    desc: "A bank serving crypto businesses fails, disrupting fiat rails and confidence broadly.",
+    shock: -0.05, volSpike: 0.7, decayDays: 20,
+  },
+
+  // --- Technology & security ---
+  {
+    id: "security_breach", label: "Protocol / Bridge Exploit", group: "bearish",
+    desc: "A protocol or cross-chain bridge is exploited for a significant sum.",
+    shock: -0.12, volSpike: 0.5, decayDays: 15,
+  },
+  {
+    id: "fifty_one_attack", label: "51% Attack", group: "bearish",
+    desc: "An attacker gains majority control of network consensus, undermining trust in finality.",
+    shock: -0.22, volSpike: 0.8, decayDays: 25,
+  },
+  {
+    id: "network_outage", label: "Major Network Outage", group: "bearish",
+    desc: "The network halts or degrades for an extended period.",
+    shock: -0.07, volSpike: 0.4, decayDays: 10,
+  },
+  {
+    id: "contentious_fork", label: "Contentious Hard Fork", group: "mixed",
+    desc: "The community splits over a disputed protocol change.",
+    shock: -0.02, volSpike: 0.55, decayDays: 20,
+  },
+  {
+    id: "quantum_scare", label: "Quantum Computing Scare", group: "bearish",
+    desc: "A credible claim or breakthrough raises fears about cryptographic security.",
+    shock: -0.10, volSpike: 0.6, decayDays: 15,
   },
   {
     id: "halving_event", label: "Halving Event", group: "bullish",
     desc: "A scheduled issuance halving occurs.",
     shock: 0.08, volSpike: 0.2, decayDays: 40,
   },
+
+  // --- Macro & geopolitical ---
   {
-    id: "exchange_collapse", label: "Exchange Collapse", group: "bearish",
-    desc: "A major exchange or lender fails.",
-    shock: -0.30, volSpike: 1.2, decayDays: 35,
+    id: "fed_emergency_cut", label: "Fed Emergency Rate Cut", group: "bullish",
+    desc: "The Federal Reserve cuts rates unexpectedly in response to a shock.",
+    shock: 0.11, volSpike: 0.5, decayDays: 20,
   },
   {
-    id: "security_breach", label: "Security Breach", group: "bearish",
-    desc: "A protocol or bridge is exploited.",
-    shock: -0.12, volSpike: 0.5, decayDays: 15,
+    id: "fed_emergency_hike", label: "Fed Emergency Rate Hike", group: "bearish",
+    desc: "The Federal Reserve hikes rates sharply and unexpectedly to fight inflation.",
+    shock: -0.11, volSpike: 0.5, decayDays: 20,
   },
   {
-    id: "regulatory_crackdown", label: "Regulatory Crackdown", group: "bearish",
-    desc: "A major regulator moves aggressively against the asset.",
-    shock: -0.20, volSpike: 0.5, decayDays: 30,
-  },
-  // additional catalysts requested
-  {
-    id: "macro_shock", label: "Macroeconomic Shock", group: "bearish",
-    desc: "Sudden macro shock (surprise rate hike, banking stress).",
-    shock: -0.15, volSpike: 0.8, decayDays: 28,
+    id: "geopolitical_shock", label: "Geopolitical Shock", group: "mixed",
+    desc: "War, sanctions, or a major geopolitical rupture disrupts global risk markets.",
+    shock: -0.06, volSpike: 0.7, decayDays: 25,
   },
   {
-    id: "major_institutional_buy", label: "Institutional Accumulation", group: "bullish",
-    desc: "Large, sustained accumulation by institutional players.",
-    shock: 0.12, volSpike: 0.25, decayDays: 20,
-  },
-  {
-    id: "protocol_upgrade_success", label: "Major Protocol Upgrade", group: "bullish",
-    desc: "A major protocol upgrade ships successfully and is well received.",
-    shock: 0.09, volSpike: 0.18, decayDays: 30,
-  },
-  {
-    id: "stablecoin_failure", label: "Stablecoin Failure", group: "bearish",
-    desc: "A major stablecoin loses peg or is revealed to be insolvent.",
-    shock: -0.42, volSpike: 1.6, decayDays: 60,
-  },
-  {
-    id: "geopolitical_event", label: "Geopolitical Event", group: "bearish",
-    desc: "Geopolitical shock reduces global risk appetite.",
-    shock: -0.10, volSpike: 0.5, decayDays: 14,
+    id: "stablecoin_depeg", label: "Major Stablecoin Depeg", group: "bearish",
+    desc: "A widely used stablecoin breaks its peg, shaking confidence in market plumbing.",
+    shock: -0.18, volSpike: 0.9, decayDays: 20,
   },
 ];
 
