@@ -25,6 +25,12 @@
       <button class="asset-btn" data-asset="eth">ETH</button>
       <button class="asset-btn" data-asset="sol">SOL</button>
     </div>
+    <div class="export-group">
+      <button class="ghost-btn" id="export-code-btn" title="Download a standalone, runnable .js file that reproduces this exact model">EXPORT CODE</button>
+      <button class="ghost-btn" id="export-config-btn" title="Download current slider/catalyst settings as JSON">EXPORT CONFIG</button>
+      <button class="ghost-btn" id="import-btn" title="Load a previously exported JSON config">IMPORT</button>
+      <input type="file" id="import-input" accept="application/json" hidden />
+    </div>
     <button class="ghost-btn" id="reset-btn" title="Reset all factors to defaults">RESET</button>
   </div>
 </header>
@@ -106,6 +112,7 @@
 <script src="js/engine.js"></script>
 <script src="js/simulate.js"></script>
 <script src="js/chart.js"></script>
+<script src="js/export.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

@@ -27,6 +27,10 @@
     resetBtn: document.getElementById("reset-btn"),
     seedReadout: document.getElementById("seed-readout"),
     assetBtns: Array.from(document.querySelectorAll(".asset-btn")),
+    exportCodeBtn: document.getElementById("export-code-btn"),
+    exportConfigBtn: document.getElementById("export-config-btn"),
+    importBtn: document.getElementById("import-btn"),
+    importInput: document.getElementById("import-input"),
   };
 
   const seismo = new Seismograph(els.seismographCanvas);
@@ -250,6 +254,73 @@
     runSimulation();
   }
 
+  /* ---------- Export / Import ---------- */
+  function exportModelCode() {
+    const asset = currentAsset();
+    const bundle = buildModelCodeBundle({
+      asset,
+      seed: state.seed,
+      values: state.values,
+      activeCatalystIds: Array.from(state.catalysts),
+    });
+    downloadTextFile(
+      `${asset.id}-model-${state.seed}.js`,
+      bundle,
+      "application/javascript"
+    );
+  }
+
+  function exportConfig() {
+    const snap = buildConfigSnapshot(state);
+    downloadTextFile(
+      `${state.assetId}-config-${state.seed}.json`,
+      JSON.stringify(snap, null, 2),
+      "application/json"
+    );
+  }
+
+  function importConfig(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data || typeof data !== "object") throw new Error("File doesn't look like a valid config.");
+
+        if (data.assetId && ASSETS.some((a) => a.id === data.assetId)) {
+          state.assetId = data.assetId;
+        }
+        if (data.values && typeof data.values === "object") {
+          FACTORS.forEach((f) => {
+            if (typeof data.values[f.id] === "number") {
+              state.values[f.id] = clamp(data.values[f.id], -100, 100);
+            }
+          });
+        }
+        if (Array.isArray(data.catalysts)) {
+          state.catalysts = new Set(data.catalysts.filter((id) => CATALYSTS.some((c) => c.id === id)));
+        }
+        if (typeof data.seed === "number") {
+          state.seed = data.seed;
+        }
+
+        renderTabs();
+        renderSliders();
+        renderCatalysts();
+
+        const asset = currentAsset();
+        els.priceValue.textContent = fmtPrice(asset.startPrice);
+        els.assetName.textContent = asset.name + " · illustrative";
+        els.assetBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.asset === state.assetId));
+
+        recomputeAndRender(false);
+        runSimulation();
+      } catch (err) {
+        alert("Couldn't load that config file: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
   /* ---------- Event bindings ---------- */
   els.runBtn.addEventListener("click", runSimulation);
   els.reseedBtn.addEventListener("click", () => {
@@ -257,6 +328,14 @@
     runSimulation();
   });
   els.resetBtn.addEventListener("click", resetAll);
+  els.exportCodeBtn.addEventListener("click", exportModelCode);
+  els.exportConfigBtn.addEventListener("click", exportConfig);
+  els.importBtn.addEventListener("click", () => els.importInput.click());
+  els.importInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importConfig(file);
+    e.target.value = "";
+  });
   els.assetBtns.forEach((btn) => {
     btn.addEventListener("click", () => selectAsset(btn.dataset.asset));
   });
