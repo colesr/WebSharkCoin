@@ -1,5 +1,11 @@
 /* chart.js — hand-rolled canvas rendering, no external chart library */
 
+
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
 function fitCanvas(canvas) {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -45,9 +51,9 @@ class Seismograph {
     const stepX = w / Math.max(1, n - 1);
 
     ctx.beginPath();
-    ctx.strokeStyle = "#ffb020";
+    ctx.strokeStyle = cssVar("--amber", "#ffb020");
     ctx.lineWidth = 1.6;
-    ctx.shadowColor = "rgba(255,176,32,0.55)";
+    ctx.shadowColor = cssVar("--amber", "#ffb020");
     ctx.shadowBlur = 6;
     for (let i = 0; i < n; i++) {
       const pt = this.buffer[i];
@@ -65,9 +71,11 @@ class Seismograph {
         const x = i * stepX;
         const y = midY - pt.v * (h * 0.42);
         ctx.beginPath();
-        ctx.fillStyle = `rgba(95,212,212,${pt.pulse})`;
+        ctx.fillStyle = cssVar("--cyan", "#5fd4d4");
+        ctx.globalAlpha = pt.pulse;
         ctx.arc(x, y, 2.5, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = 1;
       }
     }
   }
@@ -200,7 +208,7 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays, 
 
   // median
   ctx.beginPath();
-  ctx.strokeStyle = "#ffb020";
+  ctx.strokeStyle = cssVar("--amber", "#ffb020");
   ctx.lineWidth = 2;
   bands.p50.forEach((v, d) => {
     const x = fx(d), y = yForVal(v);

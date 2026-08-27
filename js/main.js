@@ -547,6 +547,10 @@
   document.addEventListener("mmt:sensors-applied", () => {
     renderSliders();
   });
+  document.addEventListener("mmt:theme-changed", () => {
+    seismo.draw();
+    runSimulation();
+  });
 
   window.MMT = {
     state,

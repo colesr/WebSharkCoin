@@ -17,7 +17,7 @@
     <span class="logo-mark">◈</span>
     <div class="logo-text">
       <span class="logo-title">MARKET MECHANICS TERMINAL</span>
-      <span class="logo-sub">crypto price scenario engine — v3.0 · seven engines</span>
+      <span class="logo-sub">crypto price scenario engine — v3.1 · themes · seven engines</span>
     </div>
   </div>
   <div class="topbar-right">
@@ -32,7 +32,7 @@
       <button class="ghost-btn" id="import-btn" title="Load a previously exported JSON config">IMPORT</button>
       <input type="file" id="import-input" accept="application/json" hidden />
     </div>
-    <button class="icon-btn" id="theme-quick-btn" title="Toggle dark / light mode" aria-label="Toggle theme">
+    <button class="icon-btn" id="theme-quick-btn" title="Cycle theme profiles" aria-label="Toggle theme">
       <span class="theme-icon-dark">☾</span><span class="theme-icon-light">☀</span>
     </button>
     <button class="ghost-btn" id="ide-btn" title="Open the model IDE to edit and run code directly">IDE</button>
@@ -41,8 +41,17 @@
   </div>
 </header>
 
+<nav class="nav-rail" id="nav-rail" aria-label="Section navigation">
+  <button class="nav-rail-btn is-active" data-target="section-observe">Observe</button>
+  <button class="nav-rail-btn" data-target="section-factors">Factors</button>
+  <button class="nav-rail-btn" data-target="section-engines">Engines</button>
+  <button class="nav-rail-btn" data-target="section-sensors">Sensors &amp; Scenarios</button>
+  <button class="nav-rail-btn" data-target="section-catalysts">Catalysts</button>
+</nav>
+
 <main class="layout">
 
+  <div class="ux-section-label section-anchor" id="section-observe">1 · Observe signal</div>
   <!-- Ticker / composite readout -->
   <section class="panel ticker-panel">
     <div class="ticker-readout">
@@ -79,6 +88,7 @@
     <div id="breakdown-list" class="breakdown-list"></div>
   </section>
 
+  <div class="ux-section-label section-anchor" id="section-factors">2 · Configure factors</div>
   <div class="split-row">
     <!-- Factor console -->
     <section class="panel console-panel">
@@ -107,6 +117,7 @@
     </section>
   </div>
 
+  <div class="ux-section-label section-anchor" id="section-engines">3 · Simulation engines</div>
   <!-- Advanced engines row -->
   <div class="engines-row">
     <!-- Reflexivity -->
@@ -147,6 +158,7 @@
     </section>
   </div>
 
+  <div class="ux-section-label section-anchor" id="section-sensors">4 · Sensors &amp; scenario library</div>
   <!-- Sensors + Scenarios -->
   <div class="split-row">
     <section class="panel engine-panel">
@@ -181,6 +193,7 @@
     </section>
   </div>
 
+  <div class="ux-section-label section-anchor" id="section-catalysts">5 · Event catalysts</div>
   <!-- Catalysts -->
   <section class="panel catalyst-panel">
     <h2 class="panel-title">Event Catalysts <span class="panel-sub">one-off shocks applied at day 1 of the forecast</span></h2>
@@ -217,6 +230,33 @@
   </div>
 </aside>
 
+
+<!-- ============ Theme customizer ============ -->
+<div class="theme-customizer-overlay" id="theme-customizer-overlay"></div>
+<aside class="theme-customizer" id="theme-customizer" aria-hidden="true">
+  <div class="settings-header">
+    <h2>Theme Studio</h2>
+    <button class="icon-btn" id="theme-customizer-close" aria-label="Close">✕</button>
+  </div>
+  <div class="theme-customizer-body">
+    <div>
+      <label class="field-label" for="theme-custom-name">Name</label>
+      <input type="text" id="theme-custom-name" maxlength="40" />
+    </div>
+    <div>
+      <label class="field-label" for="theme-custom-tagline">Tagline</label>
+      <input type="text" id="theme-custom-tagline" maxlength="80" />
+    </div>
+    <p class="settings-note">Edits preview live. Saving a built-in theme creates a custom copy so originals stay intact.</p>
+    <h3 class="settings-section" style="color:var(--amber);font-family:var(--font-mono);font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase;margin:8px 0 4px;">Color tokens</h3>
+    <div id="theme-token-editors"></div>
+    <div class="settings-btn-row" style="margin-top:12px;">
+      <button class="primary-btn" id="theme-custom-save">SAVE THEME</button>
+      <button class="ghost-btn" id="theme-custom-cancel">CANCEL</button>
+    </div>
+  </div>
+</aside>
+
 <!-- ============ Settings drawer ============ -->
 <div class="settings-overlay" id="settings-overlay"></div>
 <aside class="settings-panel" id="settings-panel" aria-hidden="true">
@@ -227,11 +267,22 @@
 
   <div class="settings-body">
     <section class="settings-section">
-      <h3>Appearance</h3>
-      <div class="settings-row">
-        <label class="radio-inline"><input type="radio" name="theme" value="dark" /> Dark</label>
-        <label class="radio-inline"><input type="radio" name="theme" value="light" /> Light</label>
+      <h3>Theme Profiles</h3>
+      <p class="settings-note">Seven built-in identities — or craft your own. Click a card to apply.</p>
+      <div class="theme-grid" id="theme-grid"></div>
+      <div class="theme-actions">
+        <button class="ghost-btn" id="theme-edit-btn" title="Edit active theme tokens">EDIT</button>
+        <button class="ghost-btn" id="theme-duplicate-btn" title="Duplicate active theme">DUPLICATE</button>
+        <button class="ghost-btn" id="theme-new-btn" title="Create a new theme from Midnight Amber">NEW</button>
+        <button class="ghost-btn" id="theme-delete-btn" title="Delete custom theme">DELETE</button>
+        <button class="ghost-btn" id="theme-export-btn" title="Export theme JSON">EXPORT</button>
+        <button class="ghost-btn" id="theme-import-btn" title="Import theme JSON">IMPORT</button>
+        <input type="file" id="theme-import-input" accept="application/json" hidden />
       </div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Motion</h3>
       <div class="settings-row">
         <label class="switch-row">
           <input type="checkbox" id="setting-reduce-motion" />
@@ -366,6 +417,7 @@
 <script src="js/simulate.js"></script>
 <script src="js/chart.js"></script>
 <script src="js/export.js"></script>
+<script src="js/themes.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/temporal.js"></script>
 <script src="js/contagion.js"></script>
