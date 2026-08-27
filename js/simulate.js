@@ -1,27 +1,16 @@
 /* simulate.js
-   Monte Carlo forecast: many geometric-Brownian-motion price paths driven by
-   the composite drift/volatility, plus optional one-off catalyst shocks with
-   a decaying volatility spike. We also synthesize a short "recent history"
-   lead-in using the same engine so the chart has context, clearly separated
-   from the forecast region.
-
-   This produces an internally consistent, adjustable simulation of how the
-   selected factors could play out — it is illustrative scenario modeling,
-   not a real prediction of actual future prices.
+   Monte Carlo forecast: geometric-Brownian-motion paths driven by
+   composite drift/volatility, optional one-off catalyst shocks with
+   decaying vol spikes, time-varying drift/vol curves (temporal + reflexivity),
+   and hooks for contagion / agent modes (orchestrated from main.js).
 */
 
-const TRADING_DAYS_HISTORY = 60;
-const FORECAST_DAYS = 180;
-const NUM_PATHS = 300;
 const DT = 1 / 365;
 
 function activeCatalysts(activeIds) {
   return CATALYSTS.filter((c) => activeIds.has(c.id));
 }
 
-/* Builds a per-day volatility multiplier curve from active catalysts,
-   each contributing an exponential-decay bump starting at day 0 of the
-   forecast window. */
 function buildVolCurve(days, catalysts) {
   const curve = new Array(days).fill(1);
   for (const c of catalysts) {
@@ -33,24 +22,33 @@ function buildVolCurve(days, catalysts) {
   return curve;
 }
 
-function simulatePaths({ startPrice, annualDrift, annualVol, catalysts, seed }) {
+function simulatePaths({
+  startPrice,
+  annualDrift,
+  annualVol,
+  catalysts,
+  seed,
+  forecastDays = 180,
+  numPaths = 300,
+  driftCurve = null,
+  volCurve = null,
+}) {
   const rng = mulberry32(seed);
-  const volCurve = buildVolCurve(FORECAST_DAYS, catalysts);
+  const catalystVol = buildVolCurve(forecastDays, catalysts || []);
   const paths = [];
 
-  for (let p = 0; p < NUM_PATHS; p++) {
-    const path = new Array(FORECAST_DAYS + 1);
+  for (let p = 0; p < numPaths; p++) {
+    const path = new Array(forecastDays + 1);
     let price = startPrice;
     path[0] = price;
 
-    for (let d = 1; d <= FORECAST_DAYS; d++) {
-      let dailyDrift = annualDrift;
-      let dailyVol = annualVol * volCurve[d - 1];
+    for (let d = 1; d <= forecastDays; d++) {
+      let dailyDrift = driftCurve ? (driftCurve[d] ?? driftCurve[driftCurve.length - 1] ?? annualDrift) : annualDrift;
+      let baseVol = volCurve ? (volCurve[d] ?? volCurve[volCurve.length - 1] ?? annualVol) : annualVol;
+      let dailyVol = baseVol * (catalystVol[d - 1] || 1);
 
-      // Apply catalyst jump shocks once, right at day 1 of the forecast.
-      if (d === 1) {
+      if (d === 1 && catalysts) {
         for (const c of catalysts) {
-          // small per-path randomness around the nominal shock size
           const noise = 1 + gaussian(rng) * 0.15;
           price *= 1 + c.shock * noise;
         }
@@ -67,21 +65,15 @@ function simulatePaths({ startPrice, annualDrift, annualVol, catalysts, seed }) 
   return paths;
 }
 
-/* Synthesize a plausible recent-history lead-in using a gentler version of
-   the same engine so the forecast doesn't start from a perfectly flat line.
-   Uses a separate, fixed seed offset so it doesn't consume the forecast RNG. */
-function synthesizeHistory({ startPrice, annualVol, seed }) {
+function synthesizeHistory({ startPrice, annualVol, seed, historyDays = 60 }) {
   const rng = mulberry32(seed ^ 0x9e3779b9);
-  const days = TRADING_DAYS_HISTORY;
-  const prices = new Array(days + 1);
-  let price = startPrice;
-  // walk backwards from "today" so the series ends exactly at startPrice
+  const days = historyDays;
   const forward = new Array(days + 1);
   forward[days] = startPrice;
   for (let d = days - 1; d >= 0; d--) {
     const z = gaussian(rng);
     const vol = annualVol * 0.8;
-    const stepDrift = -0.02 * DT; // mild neutral historical drift
+    const stepDrift = -0.02 * DT;
     const stepShock = vol * Math.sqrt(DT) * z;
     forward[d] = Math.max(0.01, forward[d + 1] / Math.exp(stepDrift + stepShock));
   }
@@ -94,9 +86,10 @@ function percentileAtDay(paths, day, pct) {
   return vals[idx];
 }
 
-function buildForecastBands(paths) {
+function buildForecastBands(paths, forecastDays) {
+  const days = forecastDays != null ? forecastDays : (paths[0]?.length - 1 || 180);
   const bands = { p10: [], p25: [], p50: [], p75: [], p90: [] };
-  for (let d = 0; d <= FORECAST_DAYS; d++) {
+  for (let d = 0; d <= days; d++) {
     bands.p10.push(percentileAtDay(paths, d, 10));
     bands.p25.push(percentileAtDay(paths, d, 25));
     bands.p50.push(percentileAtDay(paths, d, 50));

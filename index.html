@@ -17,7 +17,7 @@
     <span class="logo-mark">◈</span>
     <div class="logo-text">
       <span class="logo-title">MARKET MECHANICS TERMINAL</span>
-      <span class="logo-sub">crypto price scenario engine — v2.0</span>
+      <span class="logo-sub">crypto price scenario engine — v3.0 · seven engines</span>
     </div>
   </div>
   <div class="topbar-right">
@@ -63,6 +63,10 @@
           <span class="metric-label">Signal</span>
           <span class="metric-value tone-tag" id="tone-value">NEUTRAL</span>
         </div>
+        <div class="metric">
+          <span class="metric-label">Active Engines</span>
+          <span class="metric-value mode-badge" id="mode-badge">Standard</span>
+        </div>
       </div>
     </div>
     <canvas id="seismograph" class="seismograph-canvas" aria-label="Live composite signal seismograph"></canvas>
@@ -78,7 +82,7 @@
   <div class="split-row">
     <!-- Factor console -->
     <section class="panel console-panel">
-      <h2 class="panel-title">Factor Console</h2>
+      <h2 class="panel-title">Factor Console <span class="panel-sub">⏱ = temporal path</span></h2>
       <div class="tabs" id="category-tabs" role="tablist"></div>
       <div class="sliders" id="sliders-container"></div>
     </section>
@@ -103,6 +107,80 @@
     </section>
   </div>
 
+  <!-- Advanced engines row -->
+  <div class="engines-row">
+    <!-- Reflexivity -->
+    <section class="panel engine-panel">
+      <h2 class="panel-title">Reflexivity <span class="panel-sub">price → sentiment feedback</span></h2>
+      <div class="settings-row settings-slider-row">
+        <label for="reflexivity-strength">Feedback strength</label>
+        <input type="range" id="reflexivity-strength" min="0" max="100" step="5" value="0" />
+        <span id="reflexivity-strength-val">0%</span>
+      </div>
+      <p class="settings-note">When &gt;0, the median path feeds back into Fear &amp; Greed, Social Buzz, and News Tone. Bubbles and crashes can self-amplify.</p>
+    </section>
+
+    <!-- Contagion -->
+    <section class="panel engine-panel">
+      <h2 class="panel-title">Contagion <span class="panel-sub">cross-asset bleed</span></h2>
+      <label class="switch-row">
+        <input type="checkbox" id="contagion-enable" />
+        <span>Enable multi-asset contagion</span>
+      </label>
+      <div id="contagion-matrix" class="contagion-matrix"></div>
+      <p class="settings-note">Shocking the primary asset transmits to ETH/SOL (and vice versa) with lag. Dashed lines on chart = other assets.</p>
+    </section>
+
+    <!-- Agents -->
+    <section class="panel engine-panel">
+      <h2 class="panel-title">Agent Swarm <span class="panel-sub">emergent drift</span></h2>
+      <label class="switch-row">
+        <input type="checkbox" id="agents-enable" />
+        <span>Enable agent-based market</span>
+      </label>
+      <div class="settings-row settings-slider-row">
+        <label for="agents-count">Agents</label>
+        <input type="range" id="agents-count" min="50" max="500" step="25" value="200" />
+        <span id="agents-count-val">200</span>
+      </div>
+      <p class="settings-note">Trend followers, mean-reverters, degens, diamond hands, panic sellers, and ETF arbs trade each other. Drift emerges from micro-behavior.</p>
+    </section>
+  </div>
+
+  <!-- Sensors + Scenarios -->
+  <div class="split-row">
+    <section class="panel engine-panel">
+      <h2 class="panel-title">Live Sensors <span class="panel-sub">nudge factors from market</span></h2>
+      <label class="switch-row">
+        <input type="checkbox" id="sensors-enable" />
+        <span>Enable sensor blend</span>
+      </label>
+      <div class="settings-row settings-slider-row">
+        <label for="sensors-blend">Blend strength</label>
+        <input type="range" id="sensors-blend" min="0" max="100" step="5" value="35" />
+        <span id="sensors-blend-val">35%</span>
+      </div>
+      <div class="sensors-actions">
+        <button class="ghost-btn" id="sensors-refresh-btn">REFRESH</button>
+        <button class="ghost-btn" id="sensors-sync-btn" title="Hard-set factors to sensor readings">SYNC TO SENSORS</button>
+      </div>
+      <div id="sensors-readout" class="sensors-readout"></div>
+      <p class="live-status" id="sensors-status"></p>
+    </section>
+
+    <section class="panel engine-panel">
+      <h2 class="panel-title">Scenario Library <span class="panel-sub">save · fork · compare</span></h2>
+      <div class="scenario-actions">
+        <button class="primary-btn" id="scenario-save-btn">SAVE CURRENT</button>
+        <button class="ghost-btn" id="scenario-export-btn">EXPORT TREE</button>
+        <button class="ghost-btn" id="scenario-import-btn">IMPORT TREE</button>
+        <input type="file" id="scenario-import-input" accept="application/json" hidden />
+      </div>
+      <div id="scenario-list" class="scenario-list"></div>
+      <div id="scenario-compare-panel" class="scenario-compare is-hidden"></div>
+    </section>
+  </div>
+
   <!-- Catalysts -->
   <section class="panel catalyst-panel">
     <h2 class="panel-title">Event Catalysts <span class="panel-sub">one-off shocks applied at day 1 of the forecast</span></h2>
@@ -111,11 +189,33 @@
 
   <p class="disclaimer">
     Forecasts are produced by a transparent, hand-configured weighting model (every weight lives in
-    <code>js/factors.js</code> and is inspectable) combined with a Monte Carlo price simulation — not a fitted or
-    trained financial model, and not a live data feed unless you turn on live comparison above. Nothing here is
-    financial advice.
+    <code>js/factors.js</code> and is inspectable) combined with Monte Carlo simulation, optional temporal paths,
+    reflexivity feedback, cross-asset contagion, and agent swarms — not a fitted or trained financial model.
+    Live sensors and price comparison use free public data when enabled. Nothing here is financial advice.
   </p>
 </main>
+
+<!-- ============ Temporal editor drawer ============ -->
+<div class="settings-overlay" id="temporal-overlay"></div>
+<aside class="settings-panel temporal-panel" id="temporal-panel" aria-hidden="true">
+  <div class="settings-header">
+    <h2 id="temporal-title">Timeline</h2>
+    <button class="icon-btn" id="temporal-close-btn" aria-label="Close">✕</button>
+  </div>
+  <div class="settings-body">
+    <label class="switch-row">
+      <input type="checkbox" id="temporal-enable" />
+      <span>Enable temporal path for this factor</span>
+    </label>
+    <canvas id="temporal-preview" class="temporal-preview-canvas"></canvas>
+    <div id="temporal-keyframes" class="temporal-keyframes"></div>
+    <div class="settings-btn-row">
+      <button class="ghost-btn" id="temporal-add-kf">+ KEYFRAME</button>
+      <button class="primary-btn" id="temporal-apply-btn">APPLY</button>
+    </div>
+    <p class="settings-note">Keyframes interpolate across the forecast horizon. Smoothstep curves between points. Enable to drive time-varying drift/vol.</p>
+  </div>
+</aside>
 
 <!-- ============ Settings drawer ============ -->
 <div class="settings-overlay" id="settings-overlay"></div>
@@ -194,9 +294,7 @@
       </div>
       <p class="settings-note">
         Off by default. When on, your Coin.ai conversations are saved in this browser's local storage only —
-        nothing is uploaded anywhere. Note: this stores a local dataset for <em>you</em> to export and use for your
-        own fine-tuning elsewhere. Continuous background training of the in-browser model itself doesn't happen —
-        that's not something an on-device inference model can actually do.
+        nothing is uploaded anywhere.
       </p>
       <div class="settings-row settings-btn-row">
         <button class="ghost-btn" id="export-all-data-btn">EXPORT ALL LOCAL DATA</button>
@@ -233,7 +331,7 @@
 
 <div class="coinai-panel" id="coinai-panel">
   <div class="coinai-header">
-    <span class="coinai-title">Coin.ai <span class="panel-sub">runs locally on your device — free</span></span>
+    <span class="coinai-title">Coin.ai <span class="panel-sub">runs locally · co-pilot for scenarios</span></span>
     <button class="icon-btn" id="coinai-close-btn" aria-label="Close Coin.ai">✕</button>
   </div>
 
@@ -254,7 +352,7 @@
     <div class="coinai-view is-hidden" id="coinai-chat-view">
       <div class="coinai-messages" id="coinai-messages"></div>
       <div class="coinai-input-row">
-        <textarea id="coinai-input" class="coinai-input" rows="1" placeholder="Ask about the current model, factors, or forecast…"></textarea>
+        <textarea id="coinai-input" class="coinai-input" rows="1" placeholder="Ask about the model, or try: 'make this look like March 2020'…"></textarea>
         <button class="primary-btn" id="coinai-send-btn">SEND</button>
       </div>
       <button class="text-btn" id="coinai-change-model-btn">↺ change model</button>
@@ -269,6 +367,12 @@
 <script src="js/chart.js"></script>
 <script src="js/export.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/temporal.js"></script>
+<script src="js/contagion.js"></script>
+<script src="js/reflexivity.js"></script>
+<script src="js/agents.js"></script>
+<script src="js/scenarios.js"></script>
+<script src="js/sensors.js"></script>
 <script src="js/main.js"></script>
 <script src="js/ide.js"></script>
 <script src="js/livedata.js"></script>

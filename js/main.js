@@ -1,4 +1,4 @@
-/* main.js — wires factor data + engine + simulator to the DOM */
+/* main.js — wires factor data + engine + simulator + all advanced modes to the DOM */
 
 (function () {
   const state = {
@@ -33,10 +33,11 @@
     exportConfigBtn: document.getElementById("export-config-btn"),
     importBtn: document.getElementById("import-btn"),
     importInput: document.getElementById("import-input"),
+    modeBadge: document.getElementById("mode-badge"),
   };
 
   const seismo = new Seismograph(els.seismographCanvas);
-  let lastDriftVal = 0, lastVolVal = 0; // for count-up animation
+  let lastDriftVal = 0, lastVolVal = 0;
 
   function settings() {
     return window.MMTSettings ? window.MMTSettings.get() : DEFAULT_SETTINGS;
@@ -46,7 +47,16 @@
     return ASSETS.find((a) => a.id === state.assetId);
   }
 
-  /* ---------- Tabs ---------- */
+  function activeModeLabel() {
+    const parts = [];
+    if (window.MMTTemporal?.isAnyEnabled?.()) parts.push("Temporal");
+    if (window.MMTReflexivity?.getStrength?.() > 0) parts.push("Reflexive");
+    if (window.MMTContagion?.isEnabled?.()) parts.push("Contagion");
+    if (window.MMTAgents?.isEnabled?.()) parts.push("Agents");
+    if (window.MMTSensors?.isEnabled?.()) parts.push("Sensors");
+    return parts.length ? parts.join(" · ") : "Standard";
+  }
+
   function renderTabs() {
     els.tabs.innerHTML = "";
     FACTOR_CATEGORIES.forEach((cat) => {
@@ -63,7 +73,6 @@
     });
   }
 
-  /* ---------- Sliders ---------- */
   function renderSliders() {
     els.slidersContainer.innerHTML = "";
     const factors = FACTORS.filter((f) => f.category === state.activeCategory);
@@ -104,11 +113,21 @@
       endLabels.appendChild(lo);
       endLabels.appendChild(hi);
 
+      // temporal timeline button
+      const tlBtn = document.createElement("button");
+      tlBtn.className = "ghost-btn temporal-btn";
+      tlBtn.textContent = "⏱";
+      tlBtn.title = "Edit temporal path for this factor";
+      tlBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        window.MMTTemporal?.openEditor?.(f.id);
+      });
+
       input.addEventListener("input", () => {
         state.values[f.id] = Number(input.value);
         val.textContent = fmtSigned(state.values[f.id]);
         val.classList.remove("pulse-cyan");
-        void val.offsetWidth; // restart animation
+        void val.offsetWidth;
         val.classList.add("pulse-cyan");
         recomputeAndRender(true);
         if (settings().autoRunOnChange) scheduleAutoRun();
@@ -118,6 +137,7 @@
       item.appendChild(desc);
       item.appendChild(input);
       item.appendChild(endLabels);
+      item.appendChild(tlBtn);
       els.slidersContainer.appendChild(item);
     });
   }
@@ -133,7 +153,6 @@
     return (n > 0 ? "+" : "") + n;
   }
 
-  /* ---------- Catalysts ---------- */
   function renderCatalysts() {
     els.catalystGrid.innerHTML = "";
     CATALYSTS.forEach((c, i) => {
@@ -182,7 +201,6 @@
     panel.classList.add("panel-flash");
   }
 
-  /* ---------- Breakdown ---------- */
   function renderBreakdown(contributions) {
     els.breakdownList.innerHTML = "";
     const top = contributions.slice(0, 7);
@@ -199,7 +217,7 @@
       const track = document.createElement("div");
       track.className = "breakdown-track";
       const fill = document.createElement("div");
-      const pct = (Math.abs(c.driftContrib) / maxAbs) * 50; // half-track max
+      const pct = (Math.abs(c.driftContrib) / maxAbs) * 50;
       fill.className = "breakdown-fill " + (c.driftContrib >= 0 ? "pos" : "neg");
       track.appendChild(fill);
       requestAnimationFrame(() => { fill.style.width = pct + "%"; });
@@ -215,7 +233,6 @@
     });
   }
 
-  /* ---------- Number count-up animation ---------- */
   function animateNumber(el, from, to, fmt, duration = 350) {
     const start = performance.now();
     function step(now) {
@@ -228,7 +245,6 @@
     requestAnimationFrame(step);
   }
 
-  /* ---------- Compute + live readouts ---------- */
   function recomputeAndRender(pulse) {
     const asset = currentAsset();
     const { annualDrift, annualVol, contributions } = computeComposite(state.values, asset.baseAnnualVol);
@@ -256,15 +272,18 @@
     seismo.push(normalizedDrift, pulse ? 1 : 0);
     seismo.draw();
 
+    if (els.modeBadge) els.modeBadge.textContent = activeModeLabel();
+
     return { annualDrift, annualVol };
   }
 
-  /* ---------- Forecast simulation ---------- */
   function runSimulation() {
     const asset = currentAsset();
     const { annualDrift, annualVol } = recomputeAndRender(false);
     const catalysts = activeCatalysts(state.catalysts);
     const cfg = settings();
+    const forecastDays = cfg.forecastDays;
+    const numPaths = cfg.numPaths;
 
     const history = synthesizeHistory({
       startPrice: asset.startPrice,
@@ -273,17 +292,101 @@
       historyDays: cfg.historyDays,
     });
 
-    const paths = simulatePaths({
-      startPrice: asset.startPrice,
-      annualDrift,
-      annualVol,
-      catalysts,
-      seed: state.seed,
-      forecastDays: cfg.forecastDays,
-      numPaths: cfg.numPaths,
-    });
+    let paths;
+    let secondaryBands = null;
+    let modeNote = "";
 
-    const bands = buildForecastBands(paths, cfg.forecastDays);
+    // --- Agent swarm takes priority when enabled ---
+    if (window.MMTAgents?.isEnabled?.()) {
+      paths = window.MMTAgents.simulateAgentPaths({
+        startPrice: asset.startPrice,
+        factorValues: state.values,
+        catalysts,
+        seed: state.seed,
+        forecastDays,
+        numPaths: Math.min(numPaths, 60),
+        numAgents: window.MMTAgents.getNumAgents?.() || 200,
+        baseVol: asset.baseAnnualVol,
+      });
+      modeNote = "Agent swarm";
+    }
+    // --- Reflexivity ---
+    else if (window.MMTReflexivity?.getStrength?.() > 0.02) {
+      paths = window.MMTReflexivity.simulateWithReflexivity({
+        startPrice: asset.startPrice,
+        baseValues: state.values,
+        baseAnnualVol: asset.baseAnnualVol,
+        catalysts,
+        seed: state.seed,
+        forecastDays,
+        numPaths,
+        strength: window.MMTReflexivity.getStrength(),
+      });
+      modeNote = "Reflexive";
+    }
+    // --- Temporal paths ---
+    else if (window.MMTTemporal?.isAnyEnabled?.()) {
+      const timelines = window.MMTTemporal.getTimelines();
+      const curve = window.MMTTemporal.computeDriftVolCurve(
+        timelines, state.values, asset.baseAnnualVol, forecastDays
+      );
+      paths = simulatePaths({
+        startPrice: asset.startPrice,
+        annualDrift,
+        annualVol,
+        catalysts,
+        seed: state.seed,
+        forecastDays,
+        numPaths,
+        driftCurve: curve.drift,
+        volCurve: curve.vol,
+      });
+      modeNote = "Temporal";
+    }
+    // --- Standard ---
+    else {
+      paths = simulatePaths({
+        startPrice: asset.startPrice,
+        annualDrift,
+        annualVol,
+        catalysts,
+        seed: state.seed,
+        forecastDays,
+        numPaths,
+      });
+    }
+
+    // --- Contagion: also simulate other assets ---
+    if (window.MMTContagion?.isEnabled?.() && !window.MMTAgents?.isEnabled?.()) {
+      const matrix = window.MMTContagion.getMatrix();
+      const multiAssets = ASSETS.map((a) => {
+        const { annualDrift: d, annualVol: v } = computeComposite(state.values, a.baseAnnualVol);
+        return { id: a.id, startPrice: a.startPrice, annualDrift: d, annualVol: v };
+      });
+      const catalystsByAsset = {};
+      ASSETS.forEach((a) => {
+        catalystsByAsset[a.id] = a.id === asset.id ? catalysts : [];
+      });
+      const multiPaths = window.MMTContagion.simulateContagionPaths({
+        assets: multiAssets,
+        catalystsByAsset,
+        seed: state.seed,
+        forecastDays,
+        numPaths: Math.min(numPaths, 120),
+        matrix,
+      });
+      // use primary asset paths from contagion run
+      paths = multiPaths[asset.id] || paths;
+      secondaryBands = {};
+      ASSETS.forEach((a) => {
+        if (a.id !== asset.id && multiPaths[a.id]) {
+          secondaryBands[a.id] = buildForecastBands(multiPaths[a.id], forecastDays);
+        }
+      });
+      modeNote = (modeNote ? modeNote + " + " : "") + "Contagion";
+    }
+
+    const bands = buildForecastBands(paths, forecastDays);
 
     els.forecastCanvas.classList.remove("chart-refresh");
     void els.forecastCanvas.offsetWidth;
@@ -293,16 +396,20 @@
       history,
       bands,
       historyDays: cfg.historyDays,
-      forecastDays: cfg.forecastDays,
+      forecastDays,
       liveHistory: state.liveHistory,
+      secondaryBands,
     });
 
     els.seedReadout.textContent = "seed: " + state.seed;
-    els.forecastSub.textContent = `Monte Carlo · ${cfg.numPaths} paths · ${cfg.forecastDays}d`;
-    document.dispatchEvent(new CustomEvent("mmt:simulation-run", { detail: { annualDrift, annualVol, bands } }));
+    els.forecastSub.textContent = `Monte Carlo · ${paths.length} paths · ${forecastDays}d` +
+      (modeNote ? ` · ${modeNote}` : "");
+
+    document.dispatchEvent(new CustomEvent("mmt:simulation-run", {
+      detail: { annualDrift, annualVol, bands, mode: modeNote },
+    }));
   }
 
-  /* ---------- Asset selection ---------- */
   function selectAsset(id) {
     const asset0 = currentAsset();
     state.assetId = id;
@@ -317,7 +424,6 @@
     document.dispatchEvent(new CustomEvent("mmt:asset-changed", { detail: { assetId: id } }));
   }
 
-  /* ---------- Reset ---------- */
   function resetAll() {
     FACTORS.forEach((f) => (state.values[f.id] = f.default));
     state.catalysts.clear();
@@ -328,7 +434,6 @@
     showToast("Reset to defaults");
   }
 
-  /* ---------- Export / Import ---------- */
   function exportModelCode() {
     const asset = currentAsset();
     const cfg = settings();
@@ -426,8 +531,23 @@
       runSimulation();
     }
   });
+  document.addEventListener("mmt:scenario-loaded", () => {
+    renderTabs();
+    renderSliders();
+    renderCatalysts();
+    const asset = currentAsset();
+    els.priceValue.textContent = fmtPrice(asset.startPrice);
+    els.assetName.textContent = asset.name + " · scenario model";
+    els.assetBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.asset === state.assetId));
+    recomputeAndRender(false);
+  });
+  document.addEventListener("mmt:temporal-changed", () => {
+    if (els.modeBadge) els.modeBadge.textContent = activeModeLabel();
+  });
+  document.addEventListener("mmt:sensors-applied", () => {
+    renderSliders();
+  });
 
-  /* ---------- Bridge for other modules (ide.js, livedata.js, chatbot.js) ---------- */
   window.MMT = {
     state,
     currentAsset,
@@ -439,7 +559,6 @@
     },
   };
 
-  /* ---------- Init ---------- */
   function init() {
     const cfg = settings();
     if (cfg.defaultAsset && ASSETS.some((a) => a.id === cfg.defaultAsset)) {

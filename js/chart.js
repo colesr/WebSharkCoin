@@ -1,5 +1,4 @@
-/* chart.js — hand-rolled canvas rendering, no external chart library so the
-   app runs fully offline from local files. */
+/* chart.js — hand-rolled canvas rendering, no external chart library */
 
 function fitCanvas(canvas) {
   const dpr = window.devicePixelRatio || 1;
@@ -17,8 +16,6 @@ function fmtPrice(v) {
   return "$" + v.toFixed(4);
 }
 
-/* --- Seismograph sparkline: a ring buffer of composite drift/vol samples,
-   redrawn whenever a slider moves. --- */
 class Seismograph {
   constructor(canvas, capacity = 140) {
     this.canvas = canvas;
@@ -37,7 +34,6 @@ class Seismograph {
     ctx.clearRect(0, 0, w, h);
     const midY = h / 2;
 
-    // baseline
     ctx.strokeStyle = "rgba(143,141,134,0.25)";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -46,7 +42,7 @@ class Seismograph {
     ctx.stroke();
 
     const n = this.buffer.length;
-    const stepX = w / (n - 1);
+    const stepX = w / Math.max(1, n - 1);
 
     ctx.beginPath();
     ctx.strokeStyle = "#ffb020";
@@ -63,7 +59,6 @@ class Seismograph {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // pulse markers where a slider was just touched
     for (let i = 0; i < n; i++) {
       const pt = this.buffer[i];
       if (pt.pulse > 0.05) {
@@ -78,8 +73,7 @@ class Seismograph {
   }
 }
 
-/* --- Forecast fan chart: history line + percentile bands + median. --- */
-function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }) {
+function drawForecastChart(canvas, { history, bands, historyDays, forecastDays, liveHistory, secondaryBands }) {
   const { ctx, w, h } = fitCanvas(canvas);
   ctx.clearRect(0, 0, w, h);
 
@@ -88,6 +82,12 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
   const plotH = h - padT - padB;
 
   const allVals = [...history, ...bands.p10, ...bands.p90];
+  if (liveHistory) allVals.push(...liveHistory);
+  if (secondaryBands) {
+    Object.values(secondaryBands).forEach((b) => {
+      if (b?.p10) allVals.push(...b.p10, ...b.p90);
+    });
+  }
   let minV = Math.min(...allVals);
   let maxV = Math.max(...allVals);
   const pad = (maxV - minV) * 0.08 || maxV * 0.1;
@@ -97,7 +97,6 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
   const xForIndex = (i) => padL + (i / totalDays) * plotW;
   const yForVal = (v) => padT + (1 - (v - minV) / (maxV - minV)) * plotH;
 
-  // grid + y labels
   ctx.strokeStyle = "rgba(143,141,134,0.14)";
   ctx.fillStyle = "#8f8d86";
   ctx.font = "11px 'IBM Plex Mono', monospace";
@@ -114,7 +113,6 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
     ctx.fillText(fmtPrice(v), padL - 8, y);
   }
 
-  // divider between history and forecast
   const todayX = xForIndex(historyDays);
   ctx.strokeStyle = "rgba(255,176,32,0.35)";
   ctx.setLineDash([3, 4]);
@@ -128,8 +126,9 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
   ctx.textAlign = "center";
   ctx.fillText("NOW", todayX, padT - 6);
 
-  // percentile band (10-90)
   const fx = (d) => xForIndex(historyDays + d);
+
+  // 10-90 band
   ctx.beginPath();
   bands.p90.forEach((v, d) => {
     const x = fx(d), y = yForVal(v);
@@ -142,7 +141,7 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
   ctx.fillStyle = "rgba(95,212,212,0.10)";
   ctx.fill();
 
-  // percentile band (25-75)
+  // 25-75 band
   ctx.beginPath();
   bands.p75.forEach((v, d) => {
     const x = fx(d), y = yForVal(v);
@@ -155,7 +154,25 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
   ctx.fillStyle = "rgba(95,212,212,0.20)";
   ctx.fill();
 
-  // history line
+  // secondary asset medians (contagion mode)
+  if (secondaryBands) {
+    const colors = { eth: "#8b7cf7", sol: "#3ecf8e", btc: "#ffb020" };
+    Object.entries(secondaryBands).forEach(([id, b]) => {
+      if (!b?.p50) return;
+      ctx.beginPath();
+      ctx.strokeStyle = colors[id] || "#8f8d86";
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 3]);
+      b.p50.forEach((v, d) => {
+        const x = fx(d), y = yForVal(v);
+        d === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  }
+
+  // history
   ctx.beginPath();
   ctx.strokeStyle = "#e9e7e1";
   ctx.lineWidth = 1.6;
@@ -165,7 +182,23 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
   });
   ctx.stroke();
 
-  // median forecast line
+  // live history overlay
+  if (liveHistory && liveHistory.length > 1) {
+    ctx.beginPath();
+    ctx.strokeStyle = "#3ecf8e";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2, 2]);
+    const len = Math.min(liveHistory.length, historyDays + 1);
+    for (let i = 0; i < len; i++) {
+      const x = xForIndex(i);
+      const y = yForVal(liveHistory[i]);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // median
   ctx.beginPath();
   ctx.strokeStyle = "#ffb020";
   ctx.lineWidth = 2;
@@ -175,7 +208,6 @@ function drawForecastChart(canvas, { history, bands, historyDays, forecastDays }
   });
   ctx.stroke();
 
-  // endpoint marker
   const lastX = fx(bands.p50.length - 1);
   const lastY = yForVal(bands.p50[bands.p50.length - 1]);
   ctx.beginPath();
