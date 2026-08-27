@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Market Mechanics Terminal — Crypto Price Factor Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="scanlines" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo-mark">◈</span>
+    <div class="logo-text">
+      <span class="logo-title">MARKET MECHANICS TERMINAL</span>
+      <span class="logo-sub">crypto price factor simulator — v1.0</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="asset-select" role="group" aria-label="Select asset">
+      <button class="asset-btn is-active" data-asset="btc">BTC</button>
+      <button class="asset-btn" data-asset="eth">ETH</button>
+      <button class="asset-btn" data-asset="sol">SOL</button>
+    </div>
+    <button class="ghost-btn" id="reset-btn" title="Reset all factors to defaults">RESET</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- Ticker / composite readout -->
+  <section class="panel ticker-panel">
+    <div class="ticker-readout">
+      <div class="ticker-price">
+        <span class="ticker-price-value" id="price-value">$111,000</span>
+        <span class="ticker-asset-name" id="asset-name">Bitcoin · illustrative</span>
+      </div>
+      <div class="ticker-metrics">
+        <div class="metric">
+          <span class="metric-label">Composite Drift (ann.)</span>
+          <span class="metric-value" id="drift-value">0.0%</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Composite Volatility (ann.)</span>
+          <span class="metric-value" id="vol-value">0.0%</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Signal</span>
+          <span class="metric-value tone-tag" id="tone-value">NEUTRAL</span>
+        </div>
+      </div>
+    </div>
+    <canvas id="seismograph" class="seismograph-canvas" aria-label="Live composite signal seismograph"></canvas>
+    <p class="micro-caption">Live signal trace — reacts to every factor change below, like a needle on a seismograph.</p>
+  </section>
+
+  <!-- Signal breakdown -->
+  <section class="panel breakdown-panel">
+    <h2 class="panel-title">Signal Breakdown <span class="panel-sub">top contributing factors</span></h2>
+    <div id="breakdown-list" class="breakdown-list"></div>
+  </section>
+
+  <div class="split-row">
+    <!-- Factor console -->
+    <section class="panel console-panel">
+      <h2 class="panel-title">Factor Console</h2>
+      <div class="tabs" id="category-tabs" role="tablist"></div>
+      <div class="sliders" id="sliders-container"></div>
+    </section>
+
+    <!-- Forecast -->
+    <section class="panel forecast-panel">
+      <h2 class="panel-title">Forecast Fan Chart <span class="panel-sub">Monte Carlo · 300 paths · 180d</span></h2>
+      <canvas id="forecast-canvas" class="forecast-canvas" aria-label="Monte Carlo forecast fan chart"></canvas>
+      <div class="forecast-legend">
+        <span><i class="dot dot-history"></i> Simulated recent history</span>
+        <span><i class="dot dot-median"></i> Median forecast</span>
+        <span><i class="dot dot-band"></i> 10–90% range</span>
+      </div>
+      <div class="forecast-controls">
+        <button class="primary-btn" id="run-btn">RUN SIMULATION</button>
+        <button class="ghost-btn" id="reseed-btn" title="Draw a new random scenario with the same settings">RESEED</button>
+        <span class="seed-readout" id="seed-readout">seed: —</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- Catalysts -->
+  <section class="panel catalyst-panel">
+    <h2 class="panel-title">Event Catalysts <span class="panel-sub">one-off shocks applied at day 1 of the forecast</span></h2>
+    <div class="catalyst-grid" id="catalyst-grid"></div>
+  </section>
+
+  <p class="disclaimer">
+    This is an educational simulation with a transparent, illustrative weighting model — not a real predictive
+    tool, financial advice, or a data feed from actual markets. Every number moves because of the sliders you set
+    above, not live market data.
+  </p>
+</main>
+
+<script src="js/factors.js"></script>
+<script src="js/rng.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/simulate.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
