@@ -31,6 +31,8 @@
       <button class="ghost-btn" id="import-btn" title="Load a previously exported JSON config">IMPORT</button>
       <input type="file" id="import-input" accept="application/json" hidden />
     </div>
+    <button class="ghost-btn" id="settings-btn" title="Open settings">SETTINGS</button>
+    <button class="ghost-btn" id="coinai-btn" title="Open Coin.ai chatbot">COIN.AI</button>
     <button class="ghost-btn" id="reset-btn" title="Reset all factors to defaults">RESET</button>
   </div>
 </header>
@@ -42,7 +44,7 @@
     <div class="ticker-readout">
       <div class="ticker-price">
         <span class="ticker-price-value" id="price-value">$111,000</span>
-        <span class="ticker-asset-name" id="asset-name">Bitcoin · illustrative</span>
+        <span class="ticker-asset-name" id="asset-name">Bitcoin</span>
       </div>
       <div class="ticker-metrics">
         <div class="metric">
@@ -61,6 +63,10 @@
     </div>
     <canvas id="seismograph" class="seismograph-canvas" aria-label="Live composite signal seismograph"></canvas>
     <p class="micro-caption">Live signal trace — reacts to every factor change below, like a needle on a seismograph.</p>
+    <div class="ticker-controls">
+      <button class="ghost-btn" id="sync-live-btn" title="Pull most recent market price">SYNC LIVE PRICE</button>
+      <span id="live-badge" class="live-badge">LIVE</span>
+    </div>
   </section>
 
   <!-- Signal breakdown -->
@@ -101,11 +107,70 @@
   </section>
 
   <p class="disclaimer">
-    This is an educational simulation with a transparent, illustrative weighting model — not a real predictive
-    tool, financial advice, or a data feed from actual markets. Every number moves because of the sliders you set
-    above, not live market data.
+    This is a transparent crypto price analysis engine. Use responsibly; not financial advice. Models should be validated against live market data before any trading decisions.
   </p>
 </main>
+
+<!-- Side panels: settings, ide, chatbot -->
+<div id="settings-panel" class="side-panel" aria-hidden="true">
+  <header class="side-panel-header"><h3>Settings</h3><button id="settings-close" class="ghost-btn">Close</button></header>
+  <div class="side-panel-body">
+    <label class="setting-row"><span>Theme</span>
+      <select id="theme-select"><option value="dark">Dark</option><option value="light">Light</option></select>
+    </label>
+    <label class="setting-row"><span>Enable animations</span>
+      <input type="checkbox" id="animations-toggle" checked />
+    </label>
+    <label class="setting-row"><span>Open IDE panel</span>
+      <button class="ghost-btn" id="open-ide-btn">Open IDE</button>
+    </label>
+    <label class="setting-row"><span>Sync live prices automatically</span>
+      <input type="checkbox" id="auto-sync-toggle" />
+    </label>
+    <label class="setting-row"><span>Extra event catalysts</span>
+      <input type="checkbox" id="extra-catalysts-toggle" />
+    </label>
+  </div>
+</div>
+
+<div id="ide-panel" class="side-panel" aria-hidden="true">
+  <header class="side-panel-header"><h3>IDE — Model & Code Lab</h3><button id="ide-close" class="ghost-btn">Close</button></header>
+  <div class="side-panel-body ide-body">
+    <textarea id="ide-editor" placeholder="Edit model code or helper functions here..." spellcheck="false"></textarea>
+    <div class="ide-controls">
+      <button id="ide-save" class="ghost-btn">Save</button>
+      <button id="ide-run" class="primary-btn">Run (sandbox)</button>
+    </div>
+    <pre id="ide-console" class="ide-console" aria-live="polite"></pre>
+  </div>
+</div>
+
+<div id="chatbot-panel" class="side-panel" aria-hidden="true">
+  <header class="side-panel-header"><h3>Coin.ai</h3><button id="chatbot-close" class="ghost-btn">Close</button></header>
+  <div class="side-panel-body chatbot-body">
+    <div id="chatbot-setup" class="chatbot-setup">
+      <p>Select a local model to download and run for free (this UI only helps orchestrate — actual local runtime is user responsibility):</p>
+      <select id="model-select">
+        <option value="llama-mini">LLaMA-mini (small)</option>
+        <option value="ggml-gpt4all">GPT4All (ggml)</option>
+        <option value="mistral-small">Mistral-small</option>
+      </select>
+      <label><input type="checkbox" id="train-on-logs-toggle" /> Allow model to be continuously trained on app logs (locally)</label>
+      <div class="chatbot-setup-actions">
+        <button id="model-download" class="primary-btn">Download & Use Locally</button>
+        <button id="model-skip" class="ghost-btn">Skip, use remote demo</button>
+      </div>
+    </div>
+
+    <div id="chatbot-window" class="chatbot-window" hidden>
+      <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" placeholder="Ask Coin.ai about models, forecasts, or data..." />
+        <button id="chat-send" class="primary-btn">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="js/factors.js"></script>
 <script src="js/rng.js"></script>
@@ -113,6 +178,11 @@
 <script src="js/simulate.js"></script>
 <script src="js/chart.js"></script>
 <script src="js/export.js"></script>
+<script src="js/data.js"></script>
+<script src="js/ui-anim.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/ide.js"></script>
+<script src="js/ai-chatbot.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

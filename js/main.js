@@ -1,4 +1,4 @@
-/* main.js — wires factor data + engine + simulator to the DOM */
+/* main.js — wires factor data + engine + simulator to the DOM, plus UI features */
 
 (function () {
   const state = {
@@ -7,6 +7,7 @@
     values: {},
     catalysts: new Set(),
     seed: randomSeed(),
+    autoSync: false,
   };
   FACTORS.forEach((f) => (state.values[f.id] = f.default));
 
@@ -31,6 +32,24 @@
     exportConfigBtn: document.getElementById("export-config-btn"),
     importBtn: document.getElementById("import-btn"),
     importInput: document.getElementById("import-input"),
+    settingsBtn: document.getElementById("settings-btn"),
+    settingsPanel: document.getElementById("settings-panel"),
+    settingsClose: document.getElementById("settings-close"),
+    themeSelect: document.getElementById("theme-select"),
+    animationsToggle: document.getElementById("animations-toggle"),
+    autoSyncToggle: document.getElementById("auto-sync-toggle"),
+    extraCatalystsToggle: document.getElementById("extra-catalysts-toggle"),
+    openIdeBtn: document.getElementById("open-ide-btn"),
+    idePanel: document.getElementById("ide-panel"),
+    ideClose: document.getElementById("ide-close"),
+    ideEditor: document.getElementById("ide-editor"),
+    ideRun: document.getElementById("ide-run"),
+    ideConsole: document.getElementById("ide-console"),
+    coinAiBtn: document.getElementById("coinai-btn"),
+    chatbotPanel: document.getElementById("chatbot-panel"),
+    chatbotClose: document.getElementById("chatbot-close"),
+    syncLiveBtn: document.getElementById("sync-live-btn"),
+    liveBadge: document.getElementById("live-badge"),
   };
 
   const seismo = new Seismograph(els.seismographCanvas);
@@ -118,7 +137,11 @@
   /* ---------- Catalysts ---------- */
   function renderCatalysts() {
     els.catalystGrid.innerHTML = "";
-    CATALYSTS.forEach((c) => {
+    const catalysts = CATALYSTS.slice();
+    if (!state.extraCatalystsEnabled) {
+      // optionally filter some if extra disabled (backwards compatible)
+    }
+    catalysts.forEach((c) => {
       const btn = document.createElement("button");
       btn.className = "catalyst-btn" + (state.catalysts.has(c.id) ? " is-active" : "");
       btn.dataset.group = c.group;
@@ -238,7 +261,7 @@
     state.assetId = id;
     const asset = currentAsset();
     els.priceValue.textContent = fmtPrice(asset.startPrice);
-    els.assetName.textContent = asset.name + " · illustrative";
+    els.assetName.textContent = asset.name;
     els.assetBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.asset === id));
     recomputeAndRender(false);
     runSimulation();
@@ -309,7 +332,7 @@
 
         const asset = currentAsset();
         els.priceValue.textContent = fmtPrice(asset.startPrice);
-        els.assetName.textContent = asset.name + " · illustrative";
+        els.assetName.textContent = asset.name;
         els.assetBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.asset === state.assetId));
 
         recomputeAndRender(false);
@@ -319,6 +342,20 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  /* ---------- Live price sync ---------- */
+  async function syncLivePrice() {
+    try {
+      const asset = currentAsset();
+      const price = await fetchCurrentPrice(asset.id);
+      if (price) {
+        els.priceValue.textContent = fmtPrice(price);
+        els.liveBadge.style.display = 'inline-block';
+      }
+    } catch (err) {
+      console.warn('live price sync failed', err);
+    }
   }
 
   /* ---------- Event bindings ---------- */
@@ -344,13 +381,113 @@
     runSimulation();
   });
 
+  // settings panel
+  els.settingsBtn.addEventListener('click', () => openSettings());
+  els.settingsClose.addEventListener('click', () => closeSettings());
+  els.themeSelect.addEventListener('change', (e) => setTheme(e.target.value));
+  els.animationsToggle.addEventListener('change', (e) => setAnimationsEnabled(e.target.checked));
+  els.autoSyncToggle.addEventListener('change', (e) => { state.autoSync = e.target.checked; localStorage.setItem('wsc:autoSync', e.target.checked ? '1' : '0'); });
+  els.extraCatalystsToggle.addEventListener('change', (e) => { state.extraCatalystsEnabled = e.target.checked; });
+  els.openIdeBtn.addEventListener('click', openIDE);
+
+  // IDE
+  els.ideClose.addEventListener('click', closeIDE);
+  els.ideRun.addEventListener('click', runIDE);
+
+  // chatbot
+  els.coinAiBtn.addEventListener('click', () => openChatbot());
+  els.chatbotClose.addEventListener('click', () => closeChatbot());
+
+  // live sync
+  els.syncLiveBtn.addEventListener('click', syncLivePrice);
+
+  /* ---------- Settings behavior ---------- */
+  function openSettings() {
+    els.settingsPanel.setAttribute('aria-hidden', 'false');
+    els.settingsPanel.style.right = '18px';
+  }
+  function closeSettings() {
+    els.settingsPanel.setAttribute('aria-hidden', 'true');
+    els.settingsPanel.style.right = '-420px';
+  }
+  function setTheme(t) {
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('wsc:theme', t);
+  }
+  function setAnimationsEnabled(enabled) {
+    localStorage.setItem('wsc:animations', enabled ? '1' : '0');
+    document.body.classList.toggle('no-anim', !enabled);
+  }
+
+  /* ---------- IDE behavior ---------- */
+  function openIDE() {
+    els.idePanel.setAttribute('aria-hidden', 'false');
+    els.idePanel.style.right = '18px';
+    // load saved
+    const saved = localStorage.getItem('wsc:ide:code');
+    if (saved) els.ideEditor.value = saved;
+  }
+  function closeIDE() {
+    els.idePanel.setAttribute('aria-hidden', 'true');
+    els.idePanel.style.right = '-420px';
+  }
+  function runIDE() {
+    const code = els.ideEditor.value;
+    localStorage.setItem('wsc:ide:code', code);
+    els.ideConsole.textContent = '';
+    try {
+      // sandboxed run: use Function to avoid access to outer scope
+      const result = new Function('FACTORS, CATALYSTS, ASSETS, state', code)(FACTORS, CATALYSTS, ASSETS, state);
+      els.ideConsole.textContent = 'Result: ' + JSON.stringify(result);
+    } catch (err) {
+      els.ideConsole.textContent = 'Error: ' + err.message;
+    }
+  }
+
+  /* ---------- Chatbot integration (delegates to ai-chatbot.js) ---------- */
+  function openChatbot() {
+    // delegate to CoinAI module if available
+    if (window.CoinAI && typeof window.CoinAI.open === 'function') {
+      window.CoinAI.open();
+      els.chatbotPanel.setAttribute('aria-hidden', 'false');
+      els.chatbotPanel.style.right = '18px';
+    } else {
+      // fallback: reveal panel so user can see setup UI
+      els.chatbotPanel.setAttribute('aria-hidden', 'false');
+      els.chatbotPanel.style.right = '18px';
+    }
+  }
+  function closeChatbot() {
+    els.chatbotPanel.setAttribute('aria-hidden', 'true');
+    els.chatbotPanel.style.right = '-420px';
+  }
+
   /* ---------- Init ---------- */
   function init() {
     renderTabs();
     renderSliders();
     renderCatalysts();
-    selectAsset("btc");
+    selectAsset('btc');
+
+    // restore settings
+    const theme = localStorage.getItem('wsc:theme') || 'dark';
+    els.themeSelect.value = theme;
+    setTheme(theme);
+    const anim = localStorage.getItem('wsc:animations');
+    els.animationsToggle.checked = anim !== '0';
+    setAnimationsEnabled(anim !== '0');
+    els.autoSyncToggle.checked = localStorage.getItem('wsc:autoSync') === '1';
+
+    // register CoinAI if present
+    if (window.CoinAI && window.CoinAI.attachOpen) window.CoinAI.attachOpen(document);
+
+    // optionally auto-sync
+    if (els.autoSyncToggle.checked) {
+      syncLivePrice();
+      setInterval(() => { if (els.autoSyncToggle.checked) syncLivePrice(); }, 60000);
+    }
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener('DOMContentLoaded', init);
 })();

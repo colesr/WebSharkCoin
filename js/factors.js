@@ -1,12 +1,5 @@
 /* factors.js
    Defines every simulated market factor.
-   Each slider factor runs -100 (bearish/risk-off end) to +100 (bullish/risk-on end).
-   driftWeight: contribution to expected annualized return (signed)
-   volWeight:   contribution to annualized volatility when the slider sits away
-                from neutral (0). A negative volWeight means moving toward the
-                bullish/orderly end of that factor calms the market; positive
-                means moving away from neutral (either direction) or toward
-                that end excites it. See engine.js for exact math.
 */
 
 const FACTOR_CATEGORIES = [
@@ -191,6 +184,32 @@ const CATALYSTS = [
     id: "regulatory_crackdown", label: "Regulatory Crackdown", group: "bearish",
     desc: "A major regulator moves aggressively against the asset.",
     shock: -0.20, volSpike: 0.5, decayDays: 30,
+  },
+  // additional catalysts requested
+  {
+    id: "macro_shock", label: "Macroeconomic Shock", group: "bearish",
+    desc: "Sudden macro shock (surprise rate hike, banking stress).",
+    shock: -0.15, volSpike: 0.8, decayDays: 28,
+  },
+  {
+    id: "major_institutional_buy", label: "Institutional Accumulation", group: "bullish",
+    desc: "Large, sustained accumulation by institutional players.",
+    shock: 0.12, volSpike: 0.25, decayDays: 20,
+  },
+  {
+    id: "protocol_upgrade_success", label: "Major Protocol Upgrade", group: "bullish",
+    desc: "A major protocol upgrade ships successfully and is well received.",
+    shock: 0.09, volSpike: 0.18, decayDays: 30,
+  },
+  {
+    id: "stablecoin_failure", label: "Stablecoin Failure", group: "bearish",
+    desc: "A major stablecoin loses peg or is revealed to be insolvent.",
+    shock: -0.42, volSpike: 1.6, decayDays: 60,
+  },
+  {
+    id: "geopolitical_event", label: "Geopolitical Event", group: "bearish",
+    desc: "Geopolitical shock reduces global risk appetite.",
+    shock: -0.10, volSpike: 0.5, decayDays: 14,
   },
 ];
 
